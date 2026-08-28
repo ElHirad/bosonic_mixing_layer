@@ -1,0 +1,75 @@
+{
+  "mps_data": "mixing_layer_mps_mac.jld2",
+  "dns_steps": 1404,
+  "config": {
+    "n": 16,
+    "reynolds": 50.0,
+    "transition_thickness": 0.12,
+    "perturbation_width": 0.2,
+    "middle_layer_fraction": 0.3,
+    "kh_mode": 1,
+    "kh_amplitude": 0.1,
+    "secondary_mode": 2,
+    "secondary_amplitude": 0.025,
+    "phase": 0.6283185307179586,
+    "max_dt": 0.0025
+  },
+  "metrics": [
+    {
+      "time": 0.0,
+      "vorticity_rmse": 0.0,
+      "vorticity_relative_l2": 0.0,
+      "vorticity_max_abs": 0.0,
+      "velocity_relative_l2": 0.0
+    },
+    {
+      "time": 0.5,
+      "vorticity_rmse": 0.007157080275016856,
+      "vorticity_relative_l2": 0.0023387272714704174,
+      "vorticity_max_abs": 0.019755278407944665,
+      "velocity_relative_l2": 0.0014595494558975223
+    },
+    {
+      "time": 1.0,
+      "vorticity_rmse": 0.0063882099486447935,
+      "vorticity_relative_l2": 0.003144984822956949,
+      "vorticity_max_abs": 0.012139111086898247,
+      "velocity_relative_l2": 0.002105238936908248
+    },
+    {
+      "time": 1.5,
+      "vorticity_rmse": 0.005027689370807395,
+      "vorticity_relative_l2": 0.0036644027627207253,
+      "vorticity_max_abs": 0.008424389758481698,
+      "velocity_relative_l2": 0.0021144390173939774
+    },
+    {
+      "time": 2.0,
+      "vorticity_rmse": 0.0036485258970202633,
+      "vorticity_relative_l2": 0.003928373265314202,
+      "vorticity_max_abs": 0.0061753110346813855,
+      "velocity_relative_l2": 0.0017589868825782504
+    },
+    {
+      "time": 2.5,
+      "vorticity_rmse": 0.0025445830012807685,
+      "vorticity_relative_l2": 0.004046005447956702,
+      "vorticity_max_abs": 0.0043230995411558115,
+      "velocity_relative_l2": 0.0013209384109182068
+    },
+    {
+      "time": 3.0,
+      "vorticity_rmse": 0.0017428566228593128,
+      "vorticity_relative_l2": 0.004092151314280104,
+      "vorticity_max_abs": 0.0028971684852792945,
+      "velocity_relative_l2": 0.0009412657748514006
+    },
+    {
+      "time": 3.5,
+      "vorticity_rmse": 0.0011840655622794452,
+      "vorticity_relative_l2": 0.004105201554008855,
+      "vorticity_max_abs": 0.001922207348266175,
+      "velocity_relative_l2": 0.000654855671925079
+    }
+  ]
+}
