@@ -68,6 +68,8 @@ Set persistent run and cache directories, then submit:
 ```bash
 export MPS_RUN_DIR=/cluster/scratch/$USER/mixing-layer/mps32-re100
 export MPS_CACHE_ROOT=/cluster/scratch/$USER/mixing-layer/operator-cache
+export MPS_REYNOLDS=100
+export MPS_PECLET=100
 sbatch hpc/mps_cpu_chunk.sbatch
 ```
 
@@ -86,8 +88,9 @@ Do not place them only in `$SLURM_TMPDIR`; that directory disappears with the
 job. Filesystems without reliable POSIX `flock`, atomic rename, and `fsync`
 semantics need a site-specific checkpoint directory.
 
-The job uses `--strict-quality`, so a failed projection, boson ceiling,
-pressure gauge, correction map, imaginary-amplitude, or bond-dimension gate
-returns a nonzero exit instead of silently producing an unconverged result.
-Plotting is deliberately disabled on compute nodes and can be done afterward
-from the final JLD2 arrays.
+If `MPS_PECLET` is omitted, the script sets `Pe=Re`. The job uses
+`--strict-quality`, so a failed projection, scalar-mass conservation, scalar
+stage-isolation check, boson ceiling, pressure gauge, correction map,
+imaginary-amplitude, or bond-dimension gate returns a nonzero exit instead of
+silently producing an unconverged result. Plotting is deliberately disabled on
+compute nodes and can be done afterward from the final JLD2 arrays.

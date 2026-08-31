@@ -11,8 +11,11 @@ include("test_mixing_layer_mps_mac.jl")
         @test final.pressure_residual < 0.02
         @test final.relative_divergence < 1e-4
         @test final.pressure_velocity_leakage < 1e-5
+        @test final.pressure_scalar_leakage < 1e-5
         @test final.correction_defect < 1e-3
         @test final.correction_pressure_leakage < 1e-5
+        @test final.correction_scalar_leakage < 1e-5
+        @test final.scalar_mass_error < SCALAR_MASS_TOLERANCE
         @test final.pressure_gauge < 1e-4
         @test final.ceiling_probability < 1e-4
         @test length(result.step_diagnostics_history) == 1
@@ -21,11 +24,14 @@ include("test_mixing_layer_mps_mac.jl")
         saved = load(data_path)
         @test saved["times"] == result.times
         @test size(saved["u"]) == (4, 4, 2)
+        @test size(saved["scalar"]) == (4, 4, 2)
+        @test haskey(saved, "terminal_scalar")
         @test haskey(saved, "step_diagnostics")
         @test saved["snapshot_steps"] == [0, 1]
         @test saved["completed_step"] == 1
         @test saved["parameters"]["max_boson"] == MAX_BOSON
         @test saved["parameters"]["reynolds"] == 100.0
+        @test saved["parameters"]["peclet"] == 100.0
         @test saved["parameters"]["kh_amplitude"] == 0.10
         @test saved["parameters"]["secondary_amplitude"] == 0.025
 
@@ -41,27 +47,8 @@ include("test_mixing_layer_mps_mac.jl")
         )
         @test cached.cache_hit
         @test isfile(cache_path)
-        @test length(cached.predictor) == 5
+        @test length(cached.predictor) == 8
         @test siteinds(cached.site_template) == siteinds(loaded.state)
-
-        legacy_directory = joinpath(output_dir, "legacy_operator_cache")
-        legacy_fingerprint = legacy_operator_fingerprint(
-            cache_config,
-            only(LEGACY_OPERATOR_SOURCE_DIGESTS),
-        )
-        legacy_path = operator_cache_path(legacy_directory, legacy_fingerprint)
-        write_operator_cache(
-            legacy_path,
-            cached,
-            cache_config;
-            fingerprint=legacy_fingerprint,
-        )
-        legacy_cached, loaded_legacy_path = load_or_build_operators(
-            cache_config;
-            cache_directory=legacy_directory,
-        )
-        @test legacy_cached.cache_hit
-        @test loaded_legacy_path == legacy_path
     end
 end
 
@@ -112,6 +99,7 @@ end
         @test continuous_fields.u ≈ resumed_fields.u atol=1e-10 rtol=1e-10
         @test continuous_fields.v ≈ resumed_fields.v atol=1e-10 rtol=1e-10
         @test continuous_fields.phi ≈ resumed_fields.phi atol=1e-10 rtol=1e-10
+        @test continuous_fields.scalar ≈ resumed_fields.scalar atol=1e-10 rtol=1e-10
         fidelity = abs(inner(continuous.state, resumed.state)) /
             (norm(continuous.state) * norm(resumed.state))
         @test fidelity ≈ 1 atol=1e-10

@@ -15,6 +15,8 @@ set -euo pipefail
 # sbatch --export=ALL,GRID=16,STEPS=1 hpc/mps_cpu_probe.sbatch
 GRID="${GRID:-16}"
 STEPS="${STEPS:-0}"
+MPS_REYNOLDS="${MPS_REYNOLDS:-100}"
+MPS_PECLET="${MPS_PECLET:-${MPS_REYNOLDS}}"
 PROJECT_ROOT="${PROJECT_ROOT:-${SLURM_SUBMIT_DIR}}"
 RESULT_ROOT="${RESULT_ROOT:-${SLURM_SUBMIT_DIR}/cluster_runs/probe_${GRID}_${SLURM_JOB_ID}}"
 CACHE_ROOT="${MPS_CACHE_ROOT:-${SLURM_SUBMIT_DIR}/cluster_runs/operator_cache}"
@@ -57,7 +59,7 @@ export EXPECTED_JULIA_VERSION
 echo "project=${PROJECT_ROOT}"
 echo "results=${RESULT_ROOT}"
 echo "cache=${CACHE_ROOT}"
-echo "grid=${GRID} steps=${STEPS} cpus=${SLURM_CPUS_PER_TASK}"
+echo "grid=${GRID} steps=${STEPS} reynolds=${MPS_REYNOLDS} peclet=${MPS_PECLET} cpus=${SLURM_CPUS_PER_TASK}"
 echo "max_boson=${MPS_MAX_BOSON} depot=${JULIA_DEPOT_PATH}"
 "${JULIA_CMD}" --version
 
@@ -67,6 +69,8 @@ srun --ntasks=1 --cpu-bind=cores /usr/bin/time -v \
     --project="${PROJECT_ROOT}" \
     "${PROJECT_ROOT}/mixing_layer_mps_mac.jl" \
     --n "${GRID}" \
+    --re "${MPS_REYNOLDS}" \
+    --pe "${MPS_PECLET}" \
     --steps "${STEPS}" \
     --output-dir "${RESULT_ROOT}" \
     --cache-dir "${CACHE_ROOT}" \

@@ -16,6 +16,10 @@ of freedom:
 The periodic pressure equation is inverted with an FFT using the eigenvalues
 of the *discrete* five-point Laplacian.  Spatial derivatives in the momentum
 equations remain second-order finite differences on the staggered grid.
+
+The matched MPS comparison also advances a cell-centered passive concentration
+with centered conservative MAC fluxes and diffusivity ``1/Pe``. Its explicit
+midpoint stages use the corresponding projected velocity stages.
 """
 
 from __future__ import annotations
@@ -45,6 +49,7 @@ class SimulationConfig:
     dx: float = 1.0 / 128.0
     dy: float = 1.0 / 128.0
     reynolds: float = 1000.0
+    peclet: float | None = None
     reference_velocity: float = 1.0
     middle_layer_fraction: float = 0.30
     transition_thickness: float = 0.03
@@ -67,6 +72,8 @@ class SimulationConfig:
             raise ValueError("dx and dy must be positive")
         if self.reynolds <= 0.0:
             raise ValueError("reynolds must be positive")
+        if self.peclet is not None and self.peclet <= 0.0:
+            raise ValueError("peclet must be positive")
         if self.transition_thickness <= 0.0 or self.perturbation_width <= 0.0:
             raise ValueError("layer thicknesses must be positive")
         if not (0.0 < self.middle_layer_fraction < 1.0):
@@ -92,6 +99,18 @@ class SimulationConfig:
     def viscosity(self) -> float:
         # Re = U L / nu, with L equal to the periodic streamwise length.
         return self.reference_velocity * self.lx / self.reynolds
+
+    @property
+    def scalar_diffusivity(self) -> float:
+        """Passive-scalar diffusivity from ``Pe = U L / kappa``."""
+
+        return self.reference_velocity * self.lx / self.effective_peclet
+
+    @property
+    def effective_peclet(self) -> float:
+        """Return explicit Pe, or Re when Pe was not independently specified."""
+
+        return self.reynolds if self.peclet is None else self.peclet
 
 
 @dataclass
@@ -211,6 +230,50 @@ def conservative_advection(u: Array, v: Array, dx: float, dy: float) -> tuple[Ar
     return advection_u, advection_v
 
 
+def conservative_scalar_advection(
+    u: Array,
+    v: Array,
+    concentration: Array,
+    dx: float,
+    dy: float,
+) -> Array:
+    """Centered conservative ``div(u*c)`` at scalar cell centers."""
+
+    if u.shape != v.shape or u.shape != concentration.shape:
+        raise ValueError("u, v, and concentration must have identical shapes")
+    concentration_e = 0.5 * (concentration + np.roll(concentration, -1, axis=1))
+    concentration_w = 0.5 * (np.roll(concentration, 1, axis=1) + concentration)
+    concentration_n = 0.5 * (concentration + np.roll(concentration, -1, axis=0))
+    concentration_s = 0.5 * (np.roll(concentration, 1, axis=0) + concentration)
+    return (
+        (
+            np.roll(u, -1, axis=1) * concentration_e
+            - u * concentration_w
+        )
+        / dx
+        + (
+            np.roll(v, -1, axis=0) * concentration_n
+            - v * concentration_s
+        )
+        / dy
+    )
+
+
+def scalar_rhs(
+    u: Array,
+    v: Array,
+    concentration: Array,
+    diffusivity: float,
+    dx: float,
+    dy: float,
+) -> Array:
+    """Conservative passive-scalar advection-diffusion right-hand side."""
+
+    return -conservative_scalar_advection(u, v, concentration, dx, dy) + (
+        diffusivity * laplacian(concentration, dx, dy)
+    )
+
+
 def momentum_rhs(
     u: Array,
     v: Array,
@@ -236,6 +299,30 @@ def periodic_double_tanh_profile(y: Array, config: SimulationConfig) -> Array:
         - np.tanh((y - upper_interface) / config.transition_thickness)
         - 1.0
     )
+
+
+def periodic_double_tanh_concentration(y: Array, config: SimulationConfig) -> Array:
+    """Unnormalized 0/1/0 double-tanh concentration profile."""
+
+    lower_interface = 0.5 * (1.0 - config.middle_layer_fraction) * config.ly
+    upper_interface = 0.5 * (1.0 + config.middle_layer_fraction) * config.ly
+    return 0.5 * (
+        np.tanh((y - lower_interface) / config.transition_thickness)
+        - np.tanh((y - upper_interface) / config.transition_thickness)
+    )
+
+
+def initialize_concentration(config: SimulationConfig) -> Array:
+    """Return the sampled double-tanh scalar with exact 0 and 1 plateaus."""
+
+    y_centers = (np.arange(config.ny, dtype=float) + 0.5) * config.dy
+    profile = periodic_double_tanh_concentration(y_centers, config)
+    minimum = float(np.min(profile))
+    maximum = float(np.max(profile))
+    if maximum <= minimum:
+        raise ValueError("degenerate sampled concentration profile")
+    normalized = (profile - minimum) / (maximum - minimum)
+    return np.repeat(normalized[:, None], config.nx, axis=1)
 
 
 def initialize_velocity(config: SimulationConfig) -> tuple[Array, Array, Array]:
@@ -310,13 +397,57 @@ def advance_one_step(
     return project_velocity(u_star, v_star, dt, config.dx, config.dy)
 
 
+def advance_one_step_with_scalar(
+    u: Array,
+    v: Array,
+    concentration: Array,
+    dt: float,
+    config: SimulationConfig,
+) -> tuple[Array, Array, Array, Array]:
+    """Second-order midpoint update of velocity and its passive scalar."""
+
+    rhs_u, rhs_v = momentum_rhs(u, v, config.viscosity, config.dx, config.dy)
+    u_half_star = u + 0.5 * dt * rhs_u
+    v_half_star = v + 0.5 * dt * rhs_v
+    u_half, v_half, _ = project_velocity(
+        u_half_star, v_half_star, 0.5 * dt, config.dx, config.dy
+    )
+    concentration_half = concentration + 0.5 * dt * scalar_rhs(
+        u,
+        v,
+        concentration,
+        config.scalar_diffusivity,
+        config.dx,
+        config.dy,
+    )
+
+    rhs_u_half, rhs_v_half = momentum_rhs(
+        u_half, v_half, config.viscosity, config.dx, config.dy
+    )
+    u_star = u + dt * rhs_u_half
+    v_star = v + dt * rhs_v_half
+    concentration_next = concentration + dt * scalar_rhs(
+        u_half,
+        v_half,
+        concentration_half,
+        config.scalar_diffusivity,
+        config.dx,
+        config.dy,
+    )
+    u_next, v_next, pressure = project_velocity(
+        u_star, v_star, dt, config.dx, config.dy
+    )
+    return u_next, v_next, pressure, concentration_next
+
+
 def stable_timestep(u: Array, v: Array, config: SimulationConfig) -> float:
     """Return a conservative explicit advection/diffusion time step."""
 
     advective_rate = np.max(np.abs(u)) / config.dx + np.max(np.abs(v)) / config.dy
     dt_advection = config.cfl / max(advective_rate, np.finfo(float).tiny)
+    strongest_diffusivity = max(config.viscosity, config.scalar_diffusivity)
     dt_diffusion = config.diffusion_safety * 0.5 / (
-        config.viscosity * (1.0 / config.dx**2 + 1.0 / config.dy**2)
+        strongest_diffusivity * (1.0 / config.dx**2 + 1.0 / config.dy**2)
     )
     return min(config.max_dt, dt_advection, dt_diffusion)
 
@@ -489,13 +620,14 @@ def save_snapshots(
     snapshots: Sequence[FlowSnapshot],
     config: SimulationConfig,
     output_path: Path,
+    *,
+    concentration_snapshots: Sequence[Array] | None = None,
 ) -> None:
     """Save face velocities, pressure, vorticity, and diagnostics to a compressed NPZ."""
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     diagnostic_names = tuple(snapshots[0].diagnostics)
-    np.savez_compressed(
-        output_path,
+    arrays = dict(
         times=np.array([snapshot.time for snapshot in snapshots]),
         u=np.stack([snapshot.u for snapshot in snapshots]),
         v=np.stack([snapshot.v for snapshot in snapshots]),
@@ -512,6 +644,11 @@ def save_snapshots(
         ),
         config_json=np.array(json.dumps(asdict(config), sort_keys=True)),
     )
+    if concentration_snapshots is not None:
+        if len(concentration_snapshots) != len(snapshots):
+            raise ValueError("concentration snapshot count does not match flow snapshots")
+        arrays["concentration"] = np.stack(concentration_snapshots)
+    np.savez_compressed(output_path, **arrays)
 
 
 def _progress(snapshot_index: int, steps: int, snapshot: FlowSnapshot) -> None:
@@ -550,6 +687,12 @@ def parse_arguments() -> argparse.Namespace:
         type=float,
         default=None,
         help="override the Reynolds number",
+    )
+    parser.add_argument(
+        "--pe",
+        type=float,
+        default=None,
+        help="override Pe (default: same value as Re)",
     )
     parser.add_argument(
         "--t-end",
@@ -620,7 +763,9 @@ def main() -> None:
         dy=config.ly / ny,
     )
     if args.re is not None:
-        config = replace(config, reynolds=args.re)
+        config = replace(config, reynolds=args.re, peclet=args.re)
+    if args.pe is not None:
+        config = replace(config, peclet=args.pe)
     if args.t_end is not None:
         config = replace(config, t_end=args.t_end)
     if args.middle_layer_fraction is not None:
@@ -640,7 +785,8 @@ def main() -> None:
 
     print(
         f"Running {config.nx}x{config.ny} periodic MAC DNS: "
-        f"Re={config.reynolds:g}, nu={config.viscosity:.6g}, "
+        f"Re={config.reynolds:g}, Pe={config.effective_peclet:g}, "
+        f"nu={config.viscosity:.6g}, kappa={config.scalar_diffusivity:.6g}, "
         f"t_end={config.t_end:g}"
     )
     snapshots = run_simulation(config, progress=_progress)

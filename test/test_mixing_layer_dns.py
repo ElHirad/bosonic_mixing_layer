@@ -9,9 +9,13 @@ import numpy as np
 
 from mixing_layer_dns import (
     SimulationConfig,
+    advance_one_step,
+    advance_one_step_with_scalar,
+    conservative_scalar_advection,
     divergence,
     flow_diagnostics,
     initialize_velocity,
+    initialize_concentration,
     laplacian,
     momentum_rhs,
     periodic_double_tanh_profile,
@@ -19,6 +23,7 @@ from mixing_layer_dns import (
     project_velocity,
     run_simulation,
     solve_periodic_poisson,
+    scalar_rhs,
 )
 
 
@@ -122,6 +127,60 @@ class MixingLayerTests(unittest.TestCase):
         rhs_u, rhs_v = momentum_rhs(u, v, 0.0, config.dx, config.dy)
         energy_rate = float(np.mean(u * rhs_u + v * rhs_v))
         self.assertLess(abs(energy_rate), 2e-13)
+
+    def test_scalar_flux_and_diffusion_conserve_periodic_mass(self) -> None:
+        config = self.small_config()
+        u, v, _ = initialize_velocity(config)
+        concentration = np.random.default_rng(20260831).standard_normal(
+            (config.ny, config.nx)
+        )
+        advection = conservative_scalar_advection(
+            u, v, concentration, config.dx, config.dy
+        )
+        rhs = scalar_rhs(
+            u,
+            v,
+            concentration,
+            config.scalar_diffusivity,
+            config.dx,
+            config.dy,
+        )
+        self.assertLess(abs(float(np.sum(advection))), 2e-12)
+        self.assertLess(abs(float(np.sum(rhs))), 2e-12)
+
+    def test_initial_concentration_is_exact_zero_one_double_tanh(self) -> None:
+        config = self.small_config()
+        concentration = initialize_concentration(config)
+        self.assertEqual(concentration.shape, (config.ny, config.nx))
+        self.assertAlmostEqual(float(np.min(concentration)), 0.0, places=14)
+        self.assertAlmostEqual(float(np.max(concentration)), 1.0, places=14)
+        np.testing.assert_allclose(
+            concentration,
+            np.repeat(concentration[:, :1], config.nx, axis=1),
+            rtol=0.0,
+            atol=0.0,
+        )
+
+    def test_coupled_midpoint_step_matches_velocity_only_and_conserves_scalar(self) -> None:
+        config = self.small_config()
+        u, v, _ = initialize_velocity(config)
+        concentration = initialize_concentration(config)
+        dt = 0.5 * config.max_dt
+        expected_u, expected_v, expected_pressure = advance_one_step(u, v, dt, config)
+        actual_u, actual_v, actual_pressure, actual_concentration = (
+            advance_one_step_with_scalar(u, v, concentration, dt, config)
+        )
+        np.testing.assert_allclose(actual_u, expected_u, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(actual_v, expected_v, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(
+            actual_pressure, expected_pressure, rtol=0.0, atol=0.0
+        )
+        self.assertAlmostEqual(
+            float(np.mean(actual_concentration)),
+            float(np.mean(concentration)),
+            places=14,
+        )
+        self.assertTrue(np.all(np.isfinite(actual_concentration)))
 
     def test_short_run_returns_exactly_eight_finite_snapshots(self) -> None:
         config = self.small_config()

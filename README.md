@@ -4,10 +4,12 @@
 
 [`mixing_layer_mps_mac.jl`](./mixing_layer_mps_mac.jl) follows the bosonic-MPS
 procedure in `ldc.jl`, but implements a periodic staggered Chorin projection
-with interleaved `u`, `v`, and pressure-impulse sites on a `32 x 32` grid. The
-coarse visible-mixing default is `Re=100`, and the full run schedules eight
-vorticity snapshots. Setup, numerical details, convergence gates, and run
-commands are in [`MPS_MAC_README.md`](./MPS_MAC_README.md).
+with interleaved `u`, `v`, pressure-impulse, and scalar sites on a `32 x 32`
+grid. The solver carries a cell-centered conserved scalar initialized to 1 in
+the middle stream and 0 in both outer streams through a double-tanh shear. The
+coarse visible-mixing default is `Re=Pe=100`, and the full run schedules eight
+vorticity and concentration snapshots. Setup, numerical details, convergence
+gates, and run commands are in [`MPS_MAC_README.md`](./MPS_MAC_README.md).
 
 Quick validation:
 
@@ -17,41 +19,46 @@ julia --project=. mixing_layer_mps_mac.jl --validate
 julia --project=. mixing_layer_mps_mac.jl --smoke-test
 ```
 
-The `32 x 32` MPS contains 3072 truncated-boson sites and is a computationally
+The `32 x 32` MPS contains 4096 truncated-boson sites and is a computationally
 expensive research calculation. The code now has row-chunked MPO construction,
 a locked persistent HDF5 operator cache, one-site CPU fast path, timing
 controls, and checksummed generation-based checkpoint/restart.
-Only reduced tensor tests were run locally; the full 1400-step evolution was
-not. See [`hpc/README.md`](./hpc/README.md) before submitting it. A direct CPU
-run is:
+The complete four-field 16×16 production case described below has been run and
+validated. See [`hpc/README.md`](./hpc/README.md) before submitting a larger
+case. A direct CPU run is:
 
 ```bash
 julia --project=. mixing_layer_mps_mac.jl --strict-quality --no-plot
 ```
 
-## Completed 16×16 MPS–DNS comparison
+## Completed 16×16 MPS–DNS velocity and concentration comparison
 
 A production MPS trajectory was completed and independently validated for a
-`16 x 16` grid with `Re=50`, transition thickness `0.12`, KH-envelope width
-`0.20`, and final time `3.5`. These parameters preserve the original 32×32
-case's grid-scale Reynolds number and resolve each 10–90% shear transition with
-approximately 4.2 cells.
+`16 x 16` grid with `Re=Pe=50`, transition thickness `0.12`, KH-envelope width
+`0.20`, and final time `3.5`. The MPS trajectory completed 1,400 steps in
+21 h 59 min and passed every strict production gate. Its final relative scalar
+mass drift was `8.91e-5`; the matched DNS conserves scalar mass to roundoff.
 
 For a fair method comparison, the classical DNS starts from the exact
-staggered velocity fields stored in the MPS `t=0` snapshot. At `t=3.5`, the
-vorticity relative L2 difference is `0.4105%`, while the velocity relative L2
+staggered velocity and concentration fields stored in the MPS `t=0` snapshot.
+It evolves the scalar with the same conservative MAC fluxes and diffusivity
+`1/Pe`. At `t=3.5`, the concentration relative L2 difference is `0.0281%`, the
+vorticity relative L2 difference is `0.4105%`, and the velocity relative L2
 difference is `0.0655%`.
 
-- [MPS vorticity snapshots](./outputs/mps_dns_16x16_re50_delta012/mps_vorticity.png)
-- [DNS vorticity snapshots](./outputs/mps_dns_16x16_re50_delta012/dns_vorticity.png)
-- [MPS − DNS vorticity difference](./outputs/mps_dns_16x16_re50_delta012/mps_minus_dns_vorticity.png)
-- [Per-snapshot comparison metrics](./outputs/mps_dns_16x16_re50_delta012/comparison_metrics.csv)
+- [MPS concentration snapshots](./outputs/mps_dns_16x16_re50_pe50_scalar_delta012/mps_concentration.png)
+- [DNS concentration snapshots](./outputs/mps_dns_16x16_re50_pe50_scalar_delta012/dns_concentration.png)
+- [MPS − DNS concentration difference](./outputs/mps_dns_16x16_re50_pe50_scalar_delta012/mps_minus_dns_concentration.png)
+- [MPS vorticity snapshots](./outputs/mps_dns_16x16_re50_pe50_scalar_delta012/mps_vorticity.png)
+- [DNS vorticity snapshots](./outputs/mps_dns_16x16_re50_pe50_scalar_delta012/dns_vorticity.png)
+- [MPS − DNS vorticity difference](./outputs/mps_dns_16x16_re50_pe50_scalar_delta012/mps_minus_dns_vorticity.png)
+- [Per-snapshot comparison metrics](./outputs/mps_dns_16x16_re50_pe50_scalar_delta012/comparison_metrics.csv)
 
 Regenerate the DNS comparison and plots from a completed MPS JLD2 result with:
 
 ```bash
 python plot_mps_dns_comparison.py /path/to/mixing_layer_mps_mac.jld2 \
-  outputs/mps_dns_16x16_re50_delta012
+  outputs/mps_dns_16x16_re50_pe50_scalar_delta012 --re 50 --pe 50
 ```
 
 ## Classical 128×128 DNS reference
@@ -169,8 +176,9 @@ python mixing_layer_dns.py --middle-layer-fraction 0.25
 
 The tests cover the staggered operator adjoint identity, the discrete Poisson
 equation, projection accuracy and energy orthogonality, pure-gradient removal,
-the divergence-free KH initialization, the requested mean velocity profile,
-and exact eight-snapshot scheduling.
+the divergence-free KH initialization, conservative scalar fluxes and mass,
+the sampled double-tanh concentration, coupled midpoint evolution, the
+requested mean velocity profile, and exact eight-snapshot scheduling.
 
 ```bash
 python -m unittest discover -s test -p 'test_*.py' -v

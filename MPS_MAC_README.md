@@ -6,22 +6,23 @@ a staggered marker-and-cell grid and Chorin pressure projection.
 
 ## Formulation
 
-Each grid cell contributes three interleaved sites along a serpentine chain:
+Each grid cell contributes four interleaved sites along a serpentine chain:
 
 ```text
 u[j,i]   : ((i-1) dx,   (j-1/2) dy)  vertical face
 v[j,i]   : ((i-1/2) dx, (j-1) dy)    horizontal face
 phi[j,i] : ((i-1/2) dx, (j-1/2) dy)  cell center, phi=dt*p
+c[j,i]   : ((i-1/2) dx, (j-1/2) dy)  conserved passive scalar
 ```
 
-The default `32x32` grid therefore has 3072 bosonic sites. The stored coherent
-amplitudes use `u=4<a_u>`, `v=4<a_v>`, and `phi=4<a_phi>`, keeping the velocity
-plateaus near amplitude 0.25.
+The default `32x32` grid therefore has 4096 bosonic sites. The stored coherent
+amplitudes use `u=4<a_u>`, `v=4<a_v>`, `phi=4<a_phi>`, and `c=4<a_c>`, keeping
+the velocity and scalar plateaus near amplitude 0.25.
 
 One Chorin step consists of:
 
-1. a one-site TDVP momentum predictor containing conservative MAC advection
-   and physical viscosity;
+1. a one-site TDVP predictor containing conservative MAC momentum advection,
+   viscosity, and conservative scalar advection-diffusion;
 2. adaptive one-site TDVP relaxation of
    `laplacian(phi)=divergence(u_star)` (up to 12 blocks by default), followed
    by a uniform local displacement that enforces the zero-mean periodic
@@ -37,11 +38,24 @@ allows predictor bonds to grow and is the more conservative convergence check.
 All neighbors wrap periodically. The KH perturbation is a discrete curl of a
 corner streamfunction and is divergence-free before projection.
 
+The passive scalar obeys
+
+```text
+dc/dt + div(u c) = (1/Pe) laplacian(c).
+```
+
+It starts from a double-tanh profile, normalized on the sampled grid to be 1
+in the middle stream and 0 in the two outer streams. Centered scalar values
+are averaged to the MAC faces before forming conservative `u*c` and `v*c`
+fluxes. Their periodic sum is exactly zero at the discrete equation level.
+The default `Pe=Re`; use `--pe` to choose it independently.
+
 ## Default visible-mixing case
 
 ```text
 n = 32, dx = dy = 1/32
 Re = 100, nu = 0.01
+Pe = 100, scalar diffusivity = 0.01
 dt = 0.0025, final time = 3.5, physical steps = 1400
 middle width = 0.30 Ly, tanh transition parameter = 0.06
 KH modes = 1 and 2, amplitudes = 0.10 and 0.025
@@ -58,7 +72,7 @@ The sampled base profile is normalized to attain exactly `-1` and `+1`; its
 
 The production path includes:
 
-- direct dimension-one coherent-product construction instead of 3072 generic
+- direct dimension-one coherent-product construction instead of 4096 generic
   MPS `apply` calls;
 - in-place `OpSum` insertion for all 56,320 default operator terms;
 - an exact predictor sum split into eight row chunks per algebraic family,
@@ -120,7 +134,7 @@ julia --project=. --startup-file=no mixing_layer_mps_mac.jl \
   --resume outputs/mps_mac/mixing_layer_mps_checkpoint.h5 --no-plot
 ```
 
-The checkpoint stores the full three-field MPS, snapshot history, scalar
+The checkpoint stores the full four-field MPS, snapshot history, scalar
 diagnostics, pressure warm start, and run fingerprints. Each commit is an
 immutable HDF5 generation with a SHA-256 sidecar; file and directory data are
 fsynced before an atomic manifest update. The loader validates and ranks
@@ -144,8 +158,9 @@ signal. A partial chunk deliberately exits `75`; only a complete, independently
 validated trajectory exits `0`.
 
 Production should add `--strict-quality`, which returns a nonzero status when
-projection, leakage, correction, pressure-gauge, imaginary-amplitude, sampled
-boson-ceiling, or bond-dimension gates fail.
+projection, velocity/scalar leakage, scalar-mass conservation, correction,
+pressure-gauge, imaginary-amplitude, sampled boson-ceiling, or bond-dimension
+gates fail.
 
 CPU SLURM probe and restart-aware job templates are in
 [`hpc/README.md`](./hpc/README.md).
@@ -165,7 +180,7 @@ julia --project=. mixing_layer_mps_mac.jl --n 32 --steps 1 --no-plot
 julia --project=. mixing_layer_mps_mac.jl --n 32 --steps 5 --no-plot
 ```
 
-The full 3072-site operator set and 1400-step trajectory have not been run
+The full 4096-site operator set and 1400-step trajectory have not been run
 locally. Use `/usr/bin/time -v` and SLURM `sacct` to measure cache size, MaxRSS,
 one-step time, pressure blocks, and checkpoint latency before production.
 
@@ -182,8 +197,9 @@ outputs/mps_mac/run_status.txt
 outputs/mps_mac/operator_cache/operators_<fingerprint>.h5
 ```
 
-The JLD2 result contains exactly eight scheduled snapshots, terminal fields,
-per-step fast diagnostics, sampled ceiling diagnostics, timing records,
+The JLD2 result contains exactly eight scheduled velocity, pressure,
+vorticity, and scalar snapshots, terminal fields, per-step scalar mass and
+projection diagnostics, sampled ceiling diagnostics, timing records,
 threading provenance, configuration, and SHA-256 fingerprints.
 
 Before quantitative use, repeat with a two-site predictor, `MPS_MAX_BOSON=5`,

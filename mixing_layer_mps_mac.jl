@@ -6,7 +6,7 @@ marker-and-cell (MAC) grid and Chorin's projection method.
 
 The coherent amplitudes are interleaved cell-by-cell along a serpentine MPS:
 
-    [u-face, v-face, cell pressure impulse] x (nx*ny)
+    [u-face, v-face, cell pressure impulse, conserved scalar] x (nx*ny)
 
 For a coherent state, a generator of the form
 
@@ -15,8 +15,9 @@ For a coherent state, a generator of the form
 advances its amplitudes according to d(alpha_i)/dt = F_i(alpha).  Three
 non-Hermitian MPOs therefore implement the Chorin step:
 
-1. a pressure-free conservative MAC momentum predictor (stored as an exact
-   row-chunked sum of smaller MPOs to avoid a costly monolithic conversion);
+1. a pressure-free conservative MAC momentum and passive-scalar predictor
+   (stored as an exact row-chunked sum of smaller MPOs to avoid a costly
+   monolithic conversion);
 2. pseudo-time relaxation of laplacian(phi) = divergence(u_star), phi=dt*p;
 3. the face-velocity correction u = u_star - gradient(phi).
 
@@ -35,18 +36,15 @@ using SHA
 using Serialization
 
 const MAX_BOSON = parse(Int, get(ENV, "MPS_MAX_BOSON", "4"))
-const OPERATOR_CACHE_VERSION = 1
-const OPERATOR_DEFINITION_VERSION = 1
-# Caches written before operator identities were decoupled from the whole
-# solver source remain valid because this change does not alter any MPO.
-const LEGACY_OPERATOR_SOURCE_DIGESTS = (
-    "d58bf5535f4d6264f57511ed31dd06649d60f3d2b44726b8816fb195f7c8fd27",
-)
-const CHECKPOINT_VERSION = 2
+const OPERATOR_CACHE_VERSION = 2
+const OPERATOR_DEFINITION_VERSION = 2
+const LEGACY_OPERATOR_SOURCE_DIGESTS = ()
+const CHECKPOINT_VERSION = 3
 const CHECKPOINT_MANIFEST_FORMAT = "mixing-layer-mps-checkpoint-manifest-v1"
 const CHECKPOINT_GENERATIONS_TO_KEEP = 3
 const PRESSURE_GAUGE_TARGET = 1.0e-6
 const PRESSURE_GAUGE_SCALE_FLOOR = 1.0e-10
+const SCALAR_MASS_TOLERANCE = 1.0e-4
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +88,7 @@ end
 Base.@kwdef struct MPSMACConfig
     n::Int = 32
     reynolds::Float64 = 100.0
+    peclet::Float64 = 100.0
     dt::Float64 = 0.0025
     final_time::Float64 = 3.5
     middle_fraction::Float64 = 0.30
@@ -102,6 +101,7 @@ Base.@kwdef struct MPSMACConfig
     kh_phase::Float64 = pi / 5
     velocity_scale::Float64 = 4.0
     pressure_impulse_scale::Float64 = 4.0
+    scalar_scale::Float64 = 4.0
     maxdim::Int = 64
     cutoff::Float64 = 1.0e-10
     poisson_pseudo_dt::Float64 = 2.5e-3
@@ -121,17 +121,20 @@ end
 
 grid_spacing(config::MPSMACConfig) = 1.0 / config.n
 viscosity(config::MPSMACConfig) = 1.0 / config.reynolds
+scalar_diffusivity(config::MPSMACConfig) = 1.0 / config.peclet
 number_of_cells(config::MPSMACConfig) = config.n^2
 
 function validate_config(config::MPSMACConfig)
     config.n >= 4 || error("n must be at least 4")
     config.reynolds > 0 || error("Re must be positive")
+    config.peclet > 0 || error("Pe must be positive")
     config.dt > 0 || error("dt must be positive")
     config.final_time > 0 || error("final_time must be positive")
     0 < config.middle_fraction < 1 || error("middle_fraction must lie in (0,1)")
     config.transition_thickness > 0 || error("transition_thickness must be positive")
     config.velocity_scale > 0 || error("velocity_scale must be positive")
     config.pressure_impulse_scale > 0 || error("pressure_impulse_scale must be positive")
+    config.scalar_scale > 0 || error("scalar_scale must be positive")
     config.poisson_steps_per_block > 0 || error("poisson_steps_per_block must be positive")
     config.poisson_max_blocks > 0 || error("poisson_max_blocks must be positive")
     config.correction_steps > 0 || error("correction_steps must be positive")
@@ -166,9 +169,10 @@ function cell_from_grid(j::Integer, i::Integer, n::Integer)
     return (j - 1) * n + position
 end
 
-usite(k::Integer) = 3k - 2
-vsite(k::Integer) = 3k - 1
-psite(k::Integer) = 3k
+usite(k::Integer) = 4k - 3
+vsite(k::Integer) = 4k - 2
+psite(k::Integer) = 4k - 1
+csite(k::Integer) = 4k
 
 next_index(i::Integer, n::Integer) = i == n ? 1 : i + 1
 previous_index(i::Integer, n::Integer) = i == 1 ? n : i - 1
@@ -263,12 +267,59 @@ function mac_conservative_advection(u::AbstractMatrix, v::AbstractMatrix, h::Rea
     return advection_u, advection_v
 end
 
+"""Centered conservative flux divergence for a cell-centered passive scalar."""
+function mac_conservative_scalar_advection(
+    u::AbstractMatrix,
+    v::AbstractMatrix,
+    scalar::AbstractMatrix,
+    h::Real,
+)
+    n = size(scalar, 1)
+    size(scalar) == (n, n) || error("scalar must be square")
+    size(u) == size(scalar) == size(v) || error("velocity/scalar size mismatch")
+    result = zeros(promote_type(eltype(u), eltype(v), eltype(scalar)), n, n)
+    for j in 1:n, i in 1:n
+        ip = next_index(i, n)
+        im = previous_index(i, n)
+        jp = next_index(j, n)
+        jm = previous_index(j, n)
+
+        scalar_e = 0.5 * (scalar[j, i] + scalar[j, ip])
+        scalar_w = 0.5 * (scalar[j, im] + scalar[j, i])
+        scalar_n = 0.5 * (scalar[j, i] + scalar[jp, i])
+        scalar_s = 0.5 * (scalar[jm, i] + scalar[j, i])
+        result[j, i] = (
+            u[j, ip] * scalar_e - u[j, i] * scalar_w +
+            v[jp, i] * scalar_n - v[j, i] * scalar_s
+        ) / h
+    end
+    return result
+end
+
 function base_velocity_profile(y::Real, config::MPSMACConfig)
     y1 = 0.5 * (1 - config.middle_fraction)
     y2 = 0.5 * (1 + config.middle_fraction)
     delta = config.transition_thickness
     return tanh((y - y1) / delta) - tanh((y - y2) / delta) - 1.0
 end
+
+function base_scalar_profile(y::Real, config::MPSMACConfig)
+    y1 = 0.5 * (1 - config.middle_fraction)
+    y2 = 0.5 * (1 + config.middle_fraction)
+    delta = config.transition_thickness
+    return 0.5 * (tanh((y - y1) / delta) - tanh((y - y2) / delta))
+end
+
+"""Sample and normalize the double-tanh scalar to exact 0/1 grid plateaus."""
+function initial_scalar_profile(config::MPSMACConfig)
+    h = grid_spacing(config)
+    raw = [base_scalar_profile((j - 0.5) * h, config) for j in 1:config.n]
+    raw_min, raw_max = extrema(raw)
+    raw_max > raw_min || error("degenerate initial scalar profile")
+    return @. (raw - raw_min) / (raw_max - raw_min)
+end
+
+scalar_reference_mass(config::MPSMACConfig) = mean(initial_scalar_profile(config))
 
 """Construct a discretely divergence-free MAC double layer plus KH seed."""
 function initial_mac_fields(config::MPSMACConfig)
@@ -325,7 +376,18 @@ function initial_mac_fields(config::MPSMACConfig)
         v[j, i] = -(psi[j, ip] - psi[j, i]) / h
     end
     phi = zeros(Float64, n, n)
-    return (; u, v, phi, target_u, mean_u, seed_streamfunction=psi)
+    target_scalar = initial_scalar_profile(config)
+    scalar = repeat(reshape(target_scalar, n, 1), 1, n)
+    return (;
+        u,
+        v,
+        phi,
+        scalar,
+        target_u,
+        target_scalar,
+        mean_u,
+        seed_streamfunction=psi,
+    )
 end
 
 function validate_initial_fields(config::MPSMACConfig; verbose=true)
@@ -335,13 +397,20 @@ function validate_initial_fields(config::MPSMACConfig; verbose=true)
     xmean_u = vec(mean(fields.u; dims=2))
     profile_error = maximum(abs.(xmean_u .- fields.target_u))
     max_divergence = maximum(abs.(div))
+    scalar_profile_error = maximum(
+        abs.(vec(mean(fields.scalar; dims=2)) .- fields.target_scalar),
+    )
 
     verbose && @printf(
-        "initial MAC validation: mean(u)=%.8f, profile error=%.3e, max|div|=%.3e, max|v|=%.3e\n",
-        mean(fields.u), profile_error, max_divergence, maximum(abs.(fields.v))
+        "initial MAC validation: mean(u)=%.8f, profile error=%.3e, max|div|=%.3e, max|v|=%.3e, scalar=[%.3f, %.3f], mean(c)=%.8f\n",
+        mean(fields.u), profile_error, max_divergence, maximum(abs.(fields.v)),
+        minimum(fields.scalar), maximum(fields.scalar), mean(fields.scalar),
     )
     profile_error < 1e-12 || error("initial mean velocity profile is inconsistent")
     max_divergence < 1e-12 || error("initial MAC velocity is not divergence-free")
+    scalar_profile_error < 1e-12 || error("initial scalar is not x-uniform")
+    minimum(fields.scalar) ≈ 0.0 || error("initial outer scalar plateau is not zero")
+    maximum(fields.scalar) ≈ 1.0 || error("initial middle scalar plateau is not one")
     return fields
 end
 
@@ -364,7 +433,7 @@ the vacuum MPS, but avoids thousands of general MPS `apply` calls and their
 canonicalization/allocation overhead.
 """
 function build_initial_mps(fields, sites, config::MPSMACConfig)
-    site_count = 3number_of_cells(config)
+    site_count = 4number_of_cells(config)
     length(sites) == site_count || error("site count is inconsistent with the grid")
     links = [Index(1; tags="Link,l=$site") for site in 1:site_count-1]
     tensors = Vector{ITensor}(undef, site_count)
@@ -375,8 +444,9 @@ function build_initial_mps(fields, sites, config::MPSMACConfig)
             fields.u[j, i] / config.velocity_scale,
             fields.v[j, i] / config.velocity_scale,
             fields.phi[j, i] / config.pressure_impulse_scale,
+            fields.scalar[j, i] / config.scalar_scale,
         )
-        site_numbers = (usite(k), vsite(k), psite(k))
+        site_numbers = (usite(k), vsite(k), psite(k), csite(k))
         for (alpha, site_number) in zip(amplitudes, site_numbers)
             tensor = coherent_local_state(sites[site_number], alpha)
             site_number > 1 && (tensor *= onehot(dag(links[site_number - 1]) => 1))
@@ -404,6 +474,7 @@ function field_expectations(
     u = zeros(Float64, n, n)
     v = zeros(Float64, n, n)
     phi = zeros(Float64, n, n)
+    scalar = zeros(Float64, n, n)
     max_imaginary = 0.0
 
     for k in 1:number_of_cells(config)
@@ -411,13 +482,21 @@ function field_expectations(
         au = amplitudes[usite(k)]
         av = amplitudes[vsite(k)]
         ap = amplitudes[psite(k)]
-        max_imaginary = max(max_imaginary, abs(imag(au)), abs(imag(av)), abs(imag(ap)))
+        ac = amplitudes[csite(k)]
+        max_imaginary = max(
+            max_imaginary,
+            abs(imag(au)),
+            abs(imag(av)),
+            abs(imag(ap)),
+            abs(imag(ac)),
+        )
         u[j, i] = config.velocity_scale * real(au)
         v[j, i] = config.velocity_scale * real(av)
         phi[j, i] = config.pressure_impulse_scale * real(ap)
+        scalar[j, i] = config.scalar_scale * real(ac)
     end
     pressure = phi / config.dt
-    return (; u, v, phi, pressure, max_imaginary, ceiling_probability)
+    return (; u, v, phi, pressure, scalar, max_imaginary, ceiling_probability)
 end
 
 
@@ -445,8 +524,9 @@ function build_predictor_mpo(sites, config::MPSMACConfig)
     n = config.n
     h = grid_spacing(config)
     nu = viscosity(config)
+    kappa = scalar_diffusivity(config)
     scale = config.velocity_scale
-    # The five algebraic pieces are also split into contiguous row chunks.
+    # The eight algebraic pieces are also split into contiguous row chunks.
     # Their exact sum is unchanged, while each generic OpSum-to-MPO conversion
     # handles far fewer terms and requires substantially less peak workspace.
     chunks = min(config.predictor_chunks, n)
@@ -455,6 +535,9 @@ function build_predictor_mpo(sites, config::MPSMACConfig)
     ops_uv_x = [OpSum() for _ in 1:chunks]
     ops_vv_y = [OpSum() for _ in 1:chunks]
     ops_diffusion = [OpSum() for _ in 1:chunks]
+    ops_scalar_x = [OpSum() for _ in 1:chunks]
+    ops_scalar_y = [OpSum() for _ in 1:chunks]
+    ops_scalar_diffusion = [OpSum() for _ in 1:chunks]
 
     for j in 1:n, i in 1:n
         chunk = min(cld(j * chunks, n), chunks)
@@ -473,6 +556,7 @@ function build_predictor_mpo(sites, config::MPSMACConfig)
 
         ut = usite(k)
         vt = vsite(k)
+        ct = csite(k)
 
         # Conservative u-momentum fluxes:
         # d(u^2)/dx + d(uv)/dy at the u face.
@@ -509,8 +593,49 @@ function build_predictor_mpo(sites, config::MPSMACConfig)
         end
         add!(ops_diffusion[chunk], -4nu / h^2, "Num", ut)
         add!(ops_diffusion[chunk], -4nu / h^2, "Num", vt)
+
+        # Conservative passive-scalar fluxes at cell faces:
+        # dc/dt = -d(uc)/dx - d(vc)/dy + (1/Pe) laplacian(c).
+        # The scalar coherent-amplitude scale cancels between target and
+        # scalar factor, leaving only the velocity scale in bilinear terms.
+        c_e = ((0.5, csite(k)), (0.5, csite(kip)))
+        c_w = ((0.5, csite(kim)), (0.5, csite(k)))
+        c_n = ((0.5, csite(k)), (0.5, csite(kjp)))
+        c_s = ((0.5, csite(kjm)), (0.5, csite(k)))
+        add_quadratic_terms!(
+            ops_scalar_x[chunk], -scale / h, ct, ((1.0, usite(kip)),), c_e,
+        )
+        add_quadratic_terms!(
+            ops_scalar_x[chunk], +scale / h, ct, ((1.0, usite(k)),), c_w,
+        )
+        add_quadratic_terms!(
+            ops_scalar_y[chunk], -scale / h, ct, ((1.0, vsite(kjp)),), c_n,
+        )
+        add_quadratic_terms!(
+            ops_scalar_y[chunk], +scale / h, ct, ((1.0, vsite(k)),), c_s,
+        )
+        for neighbor in (kip, kim, kjp, kjm)
+            add!(
+                ops_scalar_diffusion[chunk],
+                kappa / h^2,
+                "adag",
+                ct,
+                "a",
+                csite(neighbor),
+            )
+        end
+        add!(ops_scalar_diffusion[chunk], -4kappa / h^2, "Num", ct)
     end
-    components = vcat(ops_uu_x, ops_uv_y, ops_uv_x, ops_vv_y, ops_diffusion)
+    components = vcat(
+        ops_uu_x,
+        ops_uv_y,
+        ops_uv_x,
+        ops_vv_y,
+        ops_diffusion,
+        ops_scalar_x,
+        ops_scalar_y,
+        ops_scalar_diffusion,
+    )
     return [MPO(component, sites) for component in components]
 end
 
@@ -599,11 +724,13 @@ function operator_fingerprint(config::MPSMACConfig)
     return stable_fingerprint((
         (:schema, OPERATOR_CACHE_VERSION),
         (:operator_definition, OPERATOR_DEFINITION_VERSION),
-        (:layout, "interleaved-u-v-phi-serpentine-v1"),
+        (:layout, "interleaved-u-v-phi-scalar-serpentine-v2"),
         (:n, config.n),
         (:reynolds, config.reynolds),
+        (:peclet, config.peclet),
         (:velocity_scale, config.velocity_scale),
         (:pressure_impulse_scale, config.pressure_impulse_scale),
+        (:scalar_scale, config.scalar_scale),
         (:predictor_chunks, config.predictor_chunks),
         (:max_boson, MAX_BOSON),
         (:julia, string(VERSION)),
@@ -616,11 +743,13 @@ end
 function legacy_operator_fingerprint(config::MPSMACConfig, source::AbstractString)
     return stable_fingerprint((
         (:schema, OPERATOR_CACHE_VERSION),
-        (:layout, "interleaved-u-v-phi-serpentine-v1"),
+        (:layout, "interleaved-u-v-phi-scalar-serpentine-v2"),
         (:n, config.n),
         (:reynolds, config.reynolds),
+        (:peclet, config.peclet),
         (:velocity_scale, config.velocity_scale),
         (:pressure_impulse_scale, config.pressure_impulse_scale),
+        (:scalar_scale, config.scalar_scale),
         (:predictor_chunks, config.predictor_chunks),
         (:max_boson, MAX_BOSON),
         (:julia, string(VERSION)),
@@ -634,7 +763,7 @@ end
 function evolution_fingerprint(config::MPSMACConfig)
     entries = Pair{Symbol,Any}[
         :schema => CHECKPOINT_VERSION,
-        :layout => "interleaved-u-v-phi-serpentine-v1",
+        :layout => "interleaved-u-v-phi-scalar-serpentine-v2",
         :max_boson => MAX_BOSON,
         :julia => string(VERSION),
         :itensors => string(Base.pkgversion(ITensors)),
@@ -778,9 +907,9 @@ end
 
 function build_operator_bundle(config::MPSMACConfig; sites=nothing)
     if isnothing(sites)
-        sites = siteinds("MACBoson", 3number_of_cells(config); conserve_qns=false)
+        sites = siteinds("MACBoson", 4number_of_cells(config); conserve_qns=false)
     end
-    length(sites) == 3number_of_cells(config) || error("operator site count mismatch")
+    length(sites) == 4number_of_cells(config) || error("operator site count mismatch")
     template = MPS(sites, fill(1, length(sites)))
     predictor = build_predictor_mpo(sites, config)
     pressure = build_pressure_relaxation_mpo(sites, config)
@@ -1205,6 +1334,11 @@ function relative_velocity_difference(first, second)
     return numerator / denominator
 end
 
+function relative_scalar_difference(first, second)
+    return norm(first.scalar - second.scalar) /
+        max(norm(first.scalar), eps(Float64))
+end
+
 function chorin_step(
     state,
     predictor_mpo,
@@ -1236,6 +1370,7 @@ function chorin_step(
         pressure_residual = pressure_poisson_residual(relaxed_fields, config)
     end
     velocity_leakage = relative_velocity_difference(tentative_fields, relaxed_fields)
+    pressure_scalar_leakage = relative_scalar_difference(tentative_fields, relaxed_fields)
     correction_seconds = @elapsed begin
         corrected = evolve_tdvp(
             correction_mpo,
@@ -1267,7 +1402,18 @@ function chorin_step(
     ) / max(correction_norm, eps(Float64))
     pressure_leakage = norm(corrected_fields.phi - relaxed_fields.phi) /
         max(norm(relaxed_fields.phi), eps(Float64))
-    defects = (; pressure_residual, velocity_leakage, correction_defect, pressure_leakage)
+    correction_scalar_leakage = relative_scalar_difference(
+        relaxed_fields,
+        corrected_fields,
+    )
+    defects = (;
+        pressure_residual,
+        velocity_leakage,
+        pressure_scalar_leakage,
+        correction_defect,
+        pressure_leakage,
+        correction_scalar_leakage,
+    )
     timing = (; predictor_seconds, pressure_seconds, correction_seconds)
     return corrected, corrected_fields, defects, blocks, timing
 end
@@ -1280,6 +1426,11 @@ function step_quality(state, fields, config::MPSMACConfig)
         relative_divergence=norm(div) /
             max((norm(fields.u) + norm(fields.v)) / h, eps(Float64)),
         pressure_gauge=pressure_gauge_ratio(fields, config),
+        scalar_mass=mean(fields.scalar),
+        scalar_mass_error=abs(mean(fields.scalar) - scalar_reference_mass(config)) /
+            max(abs(scalar_reference_mass(config)), eps(Float64)),
+        scalar_minimum=minimum(fields.scalar),
+        scalar_maximum=maximum(fields.scalar),
         max_imaginary=fields.max_imaginary,
         max_bond=maxlinkdim(state),
         ceiling_probability=fields.ceiling_probability,
@@ -1301,8 +1452,14 @@ function check_step_quality(
         quality.max_imaginary,
         defects.pressure_residual,
         defects.velocity_leakage,
+        defects.pressure_scalar_leakage,
         defects.correction_defect,
         defects.pressure_leakage,
+        defects.correction_scalar_leakage,
+        quality.scalar_mass,
+        quality.scalar_mass_error,
+        quality.scalar_minimum,
+        quality.scalar_maximum,
     )
     all(isfinite, values) || error("non-finite MPS diagnostic at physical step $step")
     isfinite(quality.ceiling_probability) && quality.ceiling_probability < 0 &&
@@ -1314,10 +1471,16 @@ function check_step_quality(
         @warn "post-projection divergence gate failed" step value=quality.relative_divergence
     defects.velocity_leakage > 1e-5 &&
         @warn "velocity changed during pressure relaxation" step value=defects.velocity_leakage
+    defects.pressure_scalar_leakage > 1e-5 &&
+        @warn "scalar changed during pressure relaxation" step value=defects.pressure_scalar_leakage
     defects.correction_defect > 1e-3 &&
         @warn "pressure-correction map defect is too large" step value=defects.correction_defect
     defects.pressure_leakage > 1e-5 &&
         @warn "pressure changed during velocity correction" step value=defects.pressure_leakage
+    defects.correction_scalar_leakage > 1e-5 &&
+        @warn "scalar changed during velocity correction" step value=defects.correction_scalar_leakage
+    quality.scalar_mass_error > SCALAR_MASS_TOLERANCE &&
+        @warn "conserved-scalar mean drifted" step value=quality.scalar_mass_error
     quality.pressure_gauge > 1e-4 &&
         @warn "pressure-impulse mean gauge drifted" step value=quality.pressure_gauge
     quality.max_imaginary > 1e-8 &&
@@ -1332,8 +1495,14 @@ function check_step_quality(
         push!(failures, "pressure residual")
     quality.relative_divergence > 1e-4 && push!(failures, "relative divergence")
     defects.velocity_leakage > 1e-5 && push!(failures, "pressure velocity leakage")
+    defects.pressure_scalar_leakage > 1e-5 &&
+        push!(failures, "pressure scalar leakage")
     defects.correction_defect > 1e-3 && push!(failures, "correction defect")
     defects.pressure_leakage > 1e-5 && push!(failures, "correction pressure leakage")
+    defects.correction_scalar_leakage > 1e-5 &&
+        push!(failures, "correction scalar leakage")
+    quality.scalar_mass_error > SCALAR_MASS_TOLERANCE &&
+        push!(failures, "scalar mass conservation")
     quality.pressure_gauge > 1e-4 && push!(failures, "pressure gauge")
     quality.max_imaginary > 1e-8 && push!(failures, "imaginary amplitude")
     isfinite(quality.ceiling_probability) && quality.ceiling_probability > 1e-4 &&
@@ -1362,11 +1531,18 @@ function snapshot_diagnostics(
         mean_u=mean(fields.u),
         mean_v=mean(fields.v),
         mean_pressure=mean(fields.pressure),
+        scalar_mass=quality.scalar_mass,
+        scalar_mass_error=quality.scalar_mass_error,
+        scalar_minimum=quality.scalar_minimum,
+        scalar_maximum=quality.scalar_maximum,
+        scalar_variance=mean((fields.scalar .- quality.scalar_mass) .^ 2),
         pressure_gauge=quality.pressure_gauge,
         pressure_residual=defects.pressure_residual,
         pressure_velocity_leakage=defects.velocity_leakage,
+        pressure_scalar_leakage=defects.pressure_scalar_leakage,
         correction_defect=defects.correction_defect,
         correction_pressure_leakage=defects.pressure_leakage,
+        correction_scalar_leakage=defects.correction_scalar_leakage,
         max_imaginary=quality.max_imaginary,
         mps_norm=real(inner(state, state)),
         max_bond=quality.max_bond,
@@ -1445,6 +1621,7 @@ function save_results(
     v = cat((field.v for field in field_history)...; dims=3)
     pressure_impulse = cat((field.phi for field in field_history)...; dims=3)
     pressure = cat((field.pressure for field in field_history)...; dims=3)
+    scalar = cat((field.scalar for field in field_history)...; dims=3)
     vorticity = cat(omega_history...; dims=3)
     diagnostic_data = Dict(
         String(name) => [getproperty(diagnostic, name) for diagnostic in diagnostics]
@@ -1467,11 +1644,13 @@ function save_results(
             v,
             pressure,
             pressure_impulse,
+            scalar,
             vorticity,
             terminal_u=terminal_fields.u,
             terminal_v=terminal_fields.v,
             terminal_pressure=terminal_fields.pressure,
             terminal_pressure_impulse=terminal_fields.phi,
+            terminal_scalar=terminal_fields.scalar,
             diagnostics=diagnostic_data,
             step_diagnostics=step_diagnostic_data,
             parameters,
@@ -1602,7 +1781,7 @@ function run_simulation(
     checkpoint_state = isnothing(checkpoint) ? nothing : checkpoint.state
     sites_override = isnothing(checkpoint_state) ? nothing : siteinds(checkpoint_state)
 
-    @info "Loading/building periodic Chorin/MAC operators" sites=3number_of_cells(config)
+    @info "Loading/building periodic Chorin/MAC/scalar operators" sites=4number_of_cells(config)
     operator_measurement = @timed load_or_build_operators(
         config;
         cache_directory=operator_cache_directory,
@@ -1637,8 +1816,10 @@ function run_simulation(
         defects = (
             pressure_residual=NaN,
             velocity_leakage=0.0,
+            pressure_scalar_leakage=0.0,
             correction_defect=0.0,
             pressure_leakage=0.0,
+            correction_scalar_leakage=0.0,
         )
         run_id = string("run-", getpid(), "-", time_ns())
     else
@@ -1697,8 +1878,9 @@ function run_simulation(
         push!(omega_history, mac_vorticity(fields.u, fields.v, grid_spacing(config)))
         push!(diagnostics_history, diagnostic)
         @printf(
-            "snapshot %d/8 step=%d t=%6.3f E=%.6e max|div|=%.3e Poisson=%.3e chi=%d ceiling=%.3e\n",
+            "snapshot %d/8 step=%d t=%6.3f E=%.6e mean(c)=%.6e dc=%.3e max|div|=%.3e Poisson=%.3e chi=%d ceiling=%.3e\n",
             length(times), step, times[end], diagnostic.kinetic_energy,
+            diagnostic.scalar_mass, diagnostic.scalar_mass_error,
             diagnostic.max_divergence, diagnostic.pressure_residual,
             diagnostic.max_bond, diagnostic.ceiling_probability,
         )
@@ -1780,8 +1962,14 @@ function run_simulation(
             max_divergence=quality.max_divergence,
             relative_divergence=quality.relative_divergence,
             pressure_velocity_leakage=defects.velocity_leakage,
+            pressure_scalar_leakage=defects.pressure_scalar_leakage,
             correction_defect=defects.correction_defect,
             correction_pressure_leakage=defects.pressure_leakage,
+            correction_scalar_leakage=defects.correction_scalar_leakage,
+            scalar_mass=quality.scalar_mass,
+            scalar_mass_error=quality.scalar_mass_error,
+            scalar_minimum=quality.scalar_minimum,
+            scalar_maximum=quality.scalar_maximum,
             pressure_gauge=quality.pressure_gauge,
             max_imaginary=quality.max_imaginary,
             max_bond=quality.max_bond,
@@ -1932,6 +2120,7 @@ function smoke_config(; output_dir="outputs/mps_mac_smoke", steps::Int=1)
     return MPSMACConfig(
         n=4,
         reynolds=production.reynolds,
+        peclet=production.peclet,
         dt=production.dt,
         final_time=steps * production.dt,
         middle_fraction=production.middle_fraction,
@@ -1944,6 +2133,7 @@ function smoke_config(; output_dir="outputs/mps_mac_smoke", steps::Int=1)
         kh_phase=production.kh_phase,
         velocity_scale=production.velocity_scale,
         pressure_impulse_scale=production.pressure_impulse_scale,
+        scalar_scale=production.scalar_scale,
         maxdim=8,
         cutoff=1e-8,
         poisson_pseudo_dt=0.01,
@@ -1980,6 +2170,8 @@ function smoke_test(
     isfinite(final.kinetic_energy) || error("smoke test produced non-finite energy")
     final.pressure_residual < 0.02 || error("smoke-test pressure relaxation failed")
     final.relative_divergence < 1e-4 || error("smoke-test projection failed")
+    final.scalar_mass_error < SCALAR_MASS_TOLERANCE ||
+        error("smoke-test scalar conservation failed")
     @printf("MPS Chorin/MAC smoke test passed; final max|div|=%.3e\n", final.max_divergence)
     return result
 end
@@ -1999,7 +2191,7 @@ function optional_argument(args, flag)
 end
 
 const CLI_VALUE_FLAGS = Set([
-    "--steps", "--n", "--re", "--dt", "--final-time", "--middle-fraction",
+    "--steps", "--n", "--re", "--pe", "--dt", "--final-time", "--middle-fraction",
     "--transition", "--kh-width", "--kh-mode", "--kh-amplitude",
     "--secondary-mode", "--secondary-amplitude", "--maxdim", "--cutoff",
     "--poisson-tol", "--poisson-blocks", "--poisson-steps",
@@ -2008,7 +2200,7 @@ const CLI_VALUE_FLAGS = Set([
     "--output-dir", "--cache-dir", "--checkpoint", "--resume",
     "--checkpoint-interval", "--ceiling-interval", "--progress-interval",
     "--stop-after-seconds", "--shutdown-reserve-seconds", "--stop-file",
-    "--run-status", "--blas-threads", "--strided-threads",
+    "--run-status", "--blas-threads", "--strided-threads", "--scalar-scale",
 ])
 
 const CLI_SWITCH_FLAGS = Set([
@@ -2049,6 +2241,7 @@ function print_help()
       --steps N           limit the default 32x32 run to N physical steps
       --n N               override the square grid size (default 32)
       --re VALUE          override Re (default 100)
+      --pe VALUE          override scalar Pe (default: same value as Re)
       --dt VALUE          override physical dt (default 0.0025)
       --final-time VALUE  override final time (default 3.5)
       --middle-fraction F override middle-layer width fraction (default 0.30)
@@ -2059,6 +2252,7 @@ function print_help()
       --secondary-mode N  override secondary KH mode (default 2)
       --secondary-amplitude A
                           override secondary KH amplitude (default 0.025)
+      --scalar-scale S    coherent-amplitude scale for scalar (default 4)
       --maxdim N          override maximum MPS bond dimension (default 64)
       --cutoff VALUE      override TDVP truncation cutoff (default 1e-10)
       --poisson-tol VALUE override pressure-relaxation residual target (default 1e-3)
@@ -2107,9 +2301,11 @@ function main(args=ARGS)
     "--help" in args && return print_help()
 
     output_dir = something(optional_argument(args, "--output-dir"), "outputs/mps_mac")
+    reynolds = argument_value(args, "--re", 100.0)
     config = MPSMACConfig(
         n=argument_value(args, "--n", 32),
-        reynolds=argument_value(args, "--re", 100.0),
+        reynolds=reynolds,
+        peclet=argument_value(args, "--pe", reynolds),
         dt=argument_value(args, "--dt", 0.0025),
         final_time=argument_value(args, "--final-time", 3.5),
         middle_fraction=argument_value(args, "--middle-fraction", 0.30),
@@ -2119,6 +2315,7 @@ function main(args=ARGS)
         kh_amplitude=argument_value(args, "--kh-amplitude", 0.10),
         secondary_mode=argument_value(args, "--secondary-mode", 2),
         secondary_amplitude=argument_value(args, "--secondary-amplitude", 0.025),
+        scalar_scale=argument_value(args, "--scalar-scale", 4.0),
         maxdim=argument_value(args, "--maxdim", 64),
         cutoff=argument_value(args, "--cutoff", 1.0e-10),
         poisson_steps_per_block=argument_value(args, "--poisson-steps", 20),

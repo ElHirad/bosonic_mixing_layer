@@ -26,7 +26,9 @@ steps == expected_steps || error("snapshot schedule differs from $expected_steps
 length(times) == 8 || error("snapshot time count mismatch")
 times ≈ steps .* parameters["dt"] || error("snapshot times do not match step*dt")
 
-for key in ("u", "v", "pressure", "pressure_impulse", "vorticity")
+parameters["peclet"] > 0 || error("Pe must be positive")
+
+for key in ("u", "v", "pressure", "pressure_impulse", "scalar", "vorticity")
     field = data[key]
     size(field) == (n, n, 8) || error("$key has size $(size(field)), expected ($n,$n,8)")
     all(isfinite, field) || error("$key contains a non-finite value")
@@ -43,8 +45,11 @@ end
 gate("relative_divergence", 1.0e-4)
 gate("pressure_residual", parameters["poisson_tolerance"]; skip_initial=true)
 gate("pressure_velocity_leakage", 1.0e-5)
+gate("pressure_scalar_leakage", 1.0e-5)
 gate("correction_defect", 1.0e-3)
 gate("correction_pressure_leakage", 1.0e-5)
+gate("correction_scalar_leakage", 1.0e-5)
+gate("scalar_mass_error", 1.0e-4)
 gate("pressure_gauge", 1.0e-4)
 gate("max_imaginary", 1.0e-8)
 gate("ceiling_probability", 1.0e-4)
@@ -68,8 +73,11 @@ end
 step_gate("pressure_residual", parameters["poisson_tolerance"])
 step_gate("relative_divergence", 1.0e-4)
 step_gate("pressure_velocity_leakage", 1.0e-5)
+step_gate("pressure_scalar_leakage", 1.0e-5)
 step_gate("correction_defect", 1.0e-3)
 step_gate("correction_pressure_leakage", 1.0e-5)
+step_gate("correction_scalar_leakage", 1.0e-5)
+step_gate("scalar_mass_error", 1.0e-4)
 step_gate("pressure_gauge", 1.0e-4)
 step_gate("max_imaginary", 1.0e-8)
 all(step_diagnostics["max_bond"] .< parameters["maxdim"]) ||
@@ -84,5 +92,5 @@ maximum(ceiling) <= 1.0e-4 || error("boson-ceiling occupation exceeds 1e-4")
 
 println(
     "validated final MPS result: steps=$completed snapshots=$(length(steps)) " *
-    "n=$(parameters["n"]) Re=$(parameters["reynolds"])",
+    "n=$(parameters["n"]) Re=$(parameters["reynolds"]) Pe=$(parameters["peclet"])",
 )

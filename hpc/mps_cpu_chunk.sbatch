@@ -20,9 +20,10 @@ set -euo pipefail
 PROJECT_ROOT="${PROJECT_ROOT:-${SLURM_SUBMIT_DIR}}"
 GRID="${GRID:-32}"
 MPS_REYNOLDS="${MPS_REYNOLDS:-100}"
+MPS_PECLET="${MPS_PECLET:-${MPS_REYNOLDS}}"
 TRANSITION_THICKNESS="${TRANSITION_THICKNESS:-0.06}"
 KH_WIDTH="${KH_WIDTH:-0.10}"
-CASE_TAG="${CASE_TAG:-mps${GRID}_re${MPS_REYNOLDS}_delta${TRANSITION_THICKNESS}}"
+CASE_TAG="${CASE_TAG:-mps${GRID}_re${MPS_REYNOLDS}_pe${MPS_PECLET}_scalar_delta${TRANSITION_THICKNESS}}"
 RUN_ROOT="${MPS_RUN_DIR:-${SLURM_SUBMIT_DIR}/cluster_runs/${CASE_TAG}}"
 CACHE_ROOT="${MPS_CACHE_ROOT:-${SLURM_SUBMIT_DIR}/cluster_runs/operator_cache}"
 CHECKPOINT="${RUN_ROOT}/mixing_layer_mps_checkpoint.h5"
@@ -83,7 +84,7 @@ else
 fi
 
 echo "project=${PROJECT_ROOT}"
-echo "grid=${GRID} reynolds=${MPS_REYNOLDS} transition=${TRANSITION_THICKNESS} kh_width=${KH_WIDTH}"
+echo "grid=${GRID} reynolds=${MPS_REYNOLDS} peclet=${MPS_PECLET} transition=${TRANSITION_THICKNESS} kh_width=${KH_WIDTH}"
 echo "run=${RUN_ROOT}"
 echo "cache=${CACHE_ROOT}"
 echo "cpus=${SLURM_CPUS_PER_TASK} application_wall_limit=${STOP_AFTER_SECONDS}s"
@@ -105,6 +106,7 @@ srun --ntasks=1 --cpu-bind=cores /usr/bin/time -v \
     "${PROJECT_ROOT}/mixing_layer_mps_mac.jl" \
     --n "${GRID}" \
     --re "${MPS_REYNOLDS}" \
+    --pe "${MPS_PECLET}" \
     --dt 0.0025 \
     --final-time 3.5 \
     --transition "${TRANSITION_THICKNESS}" \

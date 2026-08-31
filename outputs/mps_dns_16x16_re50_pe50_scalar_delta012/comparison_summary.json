@@ -1,0 +1,116 @@
+{
+  "mps_data": "mixing_layer_mps_mac.jld2",
+  "dns_steps": 1404,
+  "config": {
+    "n": 16,
+    "reynolds": 50.0,
+    "peclet": 50.0,
+    "transition_thickness": 0.12,
+    "perturbation_width": 0.2,
+    "middle_layer_fraction": 0.3,
+    "kh_mode": 1,
+    "kh_amplitude": 0.1,
+    "secondary_mode": 2,
+    "secondary_amplitude": 0.025,
+    "phase": 0.6283185307179586,
+    "max_dt": 0.0025
+  },
+  "metrics": [
+    {
+      "time": 0.0,
+      "vorticity_rmse": 0.0,
+      "vorticity_relative_l2": 0.0,
+      "vorticity_max_abs": 0.0,
+      "velocity_relative_l2": 0.0,
+      "concentration_rmse": 0.0,
+      "concentration_relative_l2": 0.0,
+      "concentration_max_abs": 0.0,
+      "mps_concentration_mass": 0.3563648228251215,
+      "dns_concentration_mass": 0.3563648228251215
+    },
+    {
+      "time": 0.5,
+      "vorticity_rmse": 0.007157082074455688,
+      "vorticity_relative_l2": 0.002338727859475095,
+      "vorticity_max_abs": 0.019755265342077166,
+      "velocity_relative_l2": 0.0014595501378193302,
+      "concentration_rmse": 0.0006727646653836092,
+      "concentration_relative_l2": 0.0015677867241243625,
+      "concentration_max_abs": 0.0017783607203788465,
+      "mps_concentration_mass": 0.35634162782297363,
+      "dns_concentration_mass": 0.3563648228251215
+    },
+    {
+      "time": 1.0,
+      "vorticity_rmse": 0.006388213331157263,
+      "vorticity_relative_l2": 0.00314498648820441,
+      "vorticity_max_abs": 0.012139114713929366,
+      "velocity_relative_l2": 0.0021052390383188555,
+      "concentration_rmse": 0.0006616241405642501,
+      "concentration_relative_l2": 0.0016961644254310207,
+      "concentration_max_abs": 0.001459355354278491,
+      "mps_concentration_mass": 0.35633674926637793,
+      "dns_concentration_mass": 0.3563648228251215
+    },
+    {
+      "time": 1.5,
+      "vorticity_rmse": 0.005027690354419702,
+      "vorticity_relative_l2": 0.0036644034796209563,
+      "vorticity_max_abs": 0.008424403603997987,
+      "velocity_relative_l2": 0.0021144387962196637,
+      "concentration_rmse": 0.0005144044864264606,
+      "concentration_relative_l2": 0.0013843278168044907,
+      "concentration_max_abs": 0.001045564702748858,
+      "mps_concentration_mass": 0.3563348845280795,
+      "dns_concentration_mass": 0.3563648228251215
+    },
+    {
+      "time": 2.0,
+      "vorticity_rmse": 0.0036485260283566907,
+      "vorticity_relative_l2": 0.003928373406724332,
+      "vorticity_max_abs": 0.006175317750931608,
+      "velocity_relative_l2": 0.0017589865991886292,
+      "concentration_rmse": 0.00035710038558969354,
+      "concentration_relative_l2": 0.0009832427014136223,
+      "concentration_max_abs": 0.0007110614541061544,
+      "mps_concentration_mass": 0.35633397247633813,
+      "dns_concentration_mass": 0.35636482282512155
+    },
+    {
+      "time": 2.5,
+      "vorticity_rmse": 0.0025445828822372165,
+      "vorticity_relative_l2": 0.004046005258671915,
+      "vorticity_max_abs": 0.00432310390325974,
+      "velocity_relative_l2": 0.001320938119808417,
+      "concentration_rmse": 0.00023520759216767357,
+      "concentration_relative_l2": 0.0006543975580303214,
+      "concentration_max_abs": 0.0004515561028152204,
+      "mps_concentration_mass": 0.35633350211694287,
+      "dns_concentration_mass": 0.35636482282512155
+    },
+    {
+      "time": 3.0,
+      "vorticity_rmse": 0.001742856448820241,
+      "vorticity_relative_l2": 0.00409215090564396,
+      "vorticity_max_abs": 0.002897171146447469,
+      "velocity_relative_l2": 0.0009412654678601927,
+      "concentration_rmse": 0.00015244985356578782,
+      "concentration_relative_l2": 0.00042614079444604403,
+      "concentration_max_abs": 0.0002940011052265934,
+      "mps_concentration_mass": 0.3563332564182672,
+      "dns_concentration_mass": 0.3563648228251215
+    },
+    {
+      "time": 3.5,
+      "vorticity_rmse": 0.0011840653986966237,
+      "vorticity_relative_l2": 0.004105200986860828,
+      "vorticity_max_abs": 0.0019222062437384418,
+      "velocity_relative_l2": 0.000654855319550122,
+      "concentration_rmse": 0.00010020017373074464,
+      "concentration_relative_l2": 0.00028068032008766357,
+      "concentration_max_abs": 0.00019105244605271965,
+      "mps_concentration_mass": 0.3563331226120251,
+      "dns_concentration_mass": 0.35636482282512155
+    }
+  ]
+}
