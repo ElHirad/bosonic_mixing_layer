@@ -96,6 +96,8 @@ class SimulationConfig:
             raise ValueError("middle_layer_fraction must lie in (0, 1)")
         if self.perturbation_mode <= 0 or self.subharmonic_mode <= 0:
             raise ValueError("perturbation modes must be positive integers")
+        if max(self.perturbation_mode, self.subharmonic_mode) > self.nx // 2:
+            raise ValueError("perturbation modes must not exceed the x-grid Nyquist mode")
         if not (0.0 < self.cfl <= 1.0):
             raise ValueError("cfl must lie in (0, 1]")
         if self.max_dt <= 0.0 or self.t_end <= 0.0:
@@ -805,6 +807,8 @@ def plot_snapshots(
     snapshots: Sequence[FlowSnapshot],
     config: SimulationConfig,
     output_path: Path,
+    *,
+    color_limit: float | None = None,
 ) -> None:
     """Save a two-by-four vorticity figure with sparse velocity arrows."""
 
@@ -817,7 +821,10 @@ def plot_snapshots(
     import matplotlib.pyplot as plt
 
     omega_fields = [vorticity(s.u, s.v, config.dx, config.dy) for s in snapshots]
-    color_limit = max(float(np.max(np.abs(field))) for field in omega_fields)
+    if color_limit is None:
+        color_limit = max(float(np.max(np.abs(field))) for field in omega_fields)
+    elif color_limit <= 0.0:
+        raise ValueError("vorticity color limit must be positive")
 
     fig, axes = plt.subplots(
         2,
@@ -877,7 +884,9 @@ def plot_snapshots(
             "Single shear layer: periodic x, free-slip y (zero-gradient u)\n"
             f"Re = {config.reynolds:g},  {config.nx} x {config.ny},  "
             f"shear thickness = {config.transition_thickness:g},  "
-            f"KH modes = {config.perturbation_mode} + {config.subharmonic_mode}"
+            f"KH modes = {config.perturbation_mode} + {config.subharmonic_mode},  "
+            f"amplitudes = {config.perturbation_amplitude:g} + "
+            f"{config.subharmonic_amplitude:g}"
         )
     else:
         title = (
@@ -888,6 +897,67 @@ def plot_snapshots(
         )
     fig.suptitle(title, fontsize=14)
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
+
+def shear_vorticity_mode_amplitudes(
+    snapshots: Sequence[FlowSnapshot], config: SimulationConfig
+) -> Array:
+    """Return streamwise modes of the negative-vorticity enstrophy density."""
+
+    amplitudes = []
+    for snapshot in snapshots:
+        omega = vorticity(snapshot.u, snapshot.v, config.dx, config.dy)
+        density_x = np.mean(np.minimum(omega, 0.0) ** 2, axis=0)
+        density_x -= np.mean(density_x)
+        amplitudes.append(np.abs(np.fft.rfft(density_x)) / config.nx)
+    return np.stack(amplitudes)
+
+
+def plot_pairing_diagnostic(
+    snapshots: Sequence[FlowSnapshot],
+    config: SimulationConfig,
+    output_path: Path,
+) -> None:
+    """Plot primary/subharmonic content used to identify vortex pairing."""
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    amplitudes = shear_vorticity_mode_amplitudes(snapshots, config)
+    primary = amplitudes[:, config.perturbation_mode]
+    subharmonic = amplitudes[:, config.subharmonic_mode]
+    ratio = subharmonic / np.maximum(primary, np.finfo(float).tiny)
+    times = np.array([snapshot.time for snapshot in snapshots])
+
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.2), constrained_layout=True)
+    axes[0].semilogy(times, primary, "o-", label=f"mode {config.perturbation_mode}")
+    axes[0].semilogy(
+        times,
+        subharmonic,
+        "s-",
+        label=f"mode {config.subharmonic_mode} (pairing)",
+    )
+    axes[0].set_xlabel("time")
+    axes[0].set_ylabel("negative-vorticity mode amplitude")
+    axes[0].legend()
+    axes[0].grid(alpha=0.25)
+
+    axes[1].semilogy(times, ratio, "o-", color="tab:purple")
+    axes[1].axhline(1.0, color="black", linestyle="--", linewidth=1.0)
+    axes[1].set_xlabel("time")
+    axes[1].set_ylabel(
+        f"mode {config.subharmonic_mode} / mode {config.perturbation_mode}"
+    )
+    axes[1].grid(alpha=0.25)
+    fig.suptitle(
+        f"Vortex-pairing diagnostic: {config.nx} x {config.ny}, "
+        f"Re = {config.reynolds:g}"
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
@@ -921,6 +991,10 @@ def save_snapshots(
         ),
         config_json=np.array(json.dumps(asdict(config), sort_keys=True)),
     )
+    if config.boundary_y == "free-slip":
+        arrays["shear_vorticity_mode_amplitudes"] = shear_vorticity_mode_amplitudes(
+            snapshots, config
+        )
     if concentration_snapshots is not None:
         if len(concentration_snapshots) != len(snapshots):
             raise ValueError("concentration snapshot count does not match flow snapshots")
@@ -1031,6 +1105,18 @@ def parse_arguments() -> argparse.Namespace:
         help="override the secondary KH cross-stream velocity amplitude",
     )
     parser.add_argument(
+        "--phase",
+        type=float,
+        default=None,
+        help="override the secondary-mode phase in radians",
+    )
+    parser.add_argument(
+        "--vorticity-limit",
+        type=float,
+        default=None,
+        help="fixed symmetric vorticity color limit for the snapshot plot",
+    )
+    parser.add_argument(
         "--no-data",
         action="store_true",
         help="do not save the compressed snapshot arrays",
@@ -1091,6 +1177,8 @@ def main() -> None:
         config = replace(config, subharmonic_mode=args.secondary_mode)
     if args.secondary_amplitude is not None:
         config = replace(config, subharmonic_amplitude=args.secondary_amplitude)
+    if args.phase is not None:
+        config = replace(config, perturbation_phase=args.phase)
 
     boundary_label = (
         "periodic-x/free-slip-y single-layer"
@@ -1114,8 +1202,17 @@ def main() -> None:
         print(f"saved data:   {data_path}")
 
     figure_path = args.output_dir / f"{output_stem}_vorticity.png"
-    plot_snapshots(snapshots, config, figure_path)
+    plot_snapshots(
+        snapshots,
+        config,
+        figure_path,
+        color_limit=args.vorticity_limit,
+    )
     print(f"saved figure: {figure_path}")
+    if config.boundary_y == "free-slip":
+        pairing_path = args.output_dir / f"{output_stem}_pairing.png"
+        plot_pairing_diagnostic(snapshots, config, pairing_path)
+        print(f"saved pairing: {pairing_path}")
 
 
 if __name__ == "__main__":

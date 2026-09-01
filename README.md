@@ -25,6 +25,31 @@ Regenerate the production result with:
 python mixing_layer_dns.py --output-dir outputs/dns_single_layer_freeslip
 ```
 
+### Finite-amplitude 16×16, Re=50 case
+
+At `16 x 16` and `Re=50`, small KH disturbances are viscously damped. A
+strongly nonlinear mode-2 seed (`A2=2.5`) plus its mode-1 pairing subharmonic
+(`A1=0.5`) nevertheless produces two resolved rolls followed by a two-to-one
+merger. This remains a nominal `Re=50` calculation (`nu=0.02`, based on the
+unit reference stream speed), but it is intentionally not a linear-instability
+test: the finite-amplitude initial field reaches a peak component speed of
+`2.66`.
+
+- [Finite-amplitude vorticity snapshots](./outputs/dns_single_layer_16x16_re50_finite_amplitude/single_shear_layer_vorticity.png)
+- [Mode-2 to mode-1 pairing diagnostic](./outputs/dns_single_layer_16x16_re50_finite_amplitude/single_shear_layer_pairing.png)
+- [Compressed 16×16 DNS fields](./outputs/dns_single_layer_16x16_re50_finite_amplitude/single_shear_layer_snapshots.npz)
+
+Regenerate this case with:
+
+```bash
+python mixing_layer_dns.py --nx 16 --ny 16 --re 50 \
+  --transition-thickness 0.04 --perturbation-width 0.12 \
+  --kh-mode 2 --kh-amplitude 2.5 \
+  --secondary-mode 1 --secondary-amplitude 0.5 --phase 0 \
+  --t-end 0.65 --vorticity-limit 20 \
+  --output-dir outputs/dns_single_layer_16x16_re50_finite_amplitude
+```
+
 ## Bosonic MPS Chorin/MAC solver (periodic comparison)
 
 [`mixing_layer_mps_mac.jl`](./mixing_layer_mps_mac.jl) follows the bosonic-MPS

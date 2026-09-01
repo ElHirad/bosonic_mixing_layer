@@ -27,6 +27,7 @@ from mixing_layer_dns import (
     project_velocity,
     project_channel_velocity,
     run_simulation,
+    shear_vorticity_mode_amplitudes,
     solve_periodic_poisson,
     solve_channel_poisson,
     single_tanh_profile,
@@ -277,6 +278,10 @@ class SingleLayerChannelTests(unittest.TestCase):
 
         snapshots = run_simulation(config)
         self.assertEqual(len(snapshots), 8)
+        mode_amplitudes = shear_vorticity_mode_amplitudes(snapshots, config)
+        self.assertEqual(mode_amplitudes.shape, (8, config.nx // 2 + 1))
+        self.assertTrue(np.all(np.isfinite(mode_amplitudes)))
+        self.assertTrue(np.all(mode_amplitudes >= 0.0))
         for snapshot in snapshots:
             self.assertLess(snapshot.diagnostics["max_divergence"], 2e-11)
             np.testing.assert_array_equal(snapshot.v[[0, -1], :], 0.0)
