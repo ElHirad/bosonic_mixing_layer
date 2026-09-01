@@ -250,6 +250,7 @@ def main() -> None:
         dy=1.0 / n,
         reynolds=args.re,
         peclet=args.pe,
+        boundary_y="periodic",
         middle_layer_fraction=args.middle_layer_fraction,
         transition_thickness=args.transition_thickness,
         perturbation_width=args.perturbation_width,

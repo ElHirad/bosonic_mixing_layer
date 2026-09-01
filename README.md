@@ -1,6 +1,31 @@
 # 2-D incompressible mixing-layer solvers
 
-## Bosonic MPS Chorin/MAC solver (current deliverable)
+## Single-layer DNS with free-slip y boundaries (current deliverable)
+
+[`mixing_layer_dns.py`](./mixing_layer_dns.py) now runs one centered shear layer
+instead of the periodic double layer. The production case uses a `256 x 256`
+MAC grid, periodicity only in `x`, and free-slip boundaries in `y`:
+
+```text
+du/dy = 0,  v = 0,  dp/dy = 0  at y = 0, Ly.
+```
+
+The initial profile is `u0(y) = tanh[(y - Ly/2)/delta]`, with the reduced
+thickness `delta = 0.02`. At `Re = 5000`, a mode-4 Kelvin--Helmholtz seed rolls
+into four vortices and a weak mode-2 subharmonic produces a visible four-to-two
+pairing. The saved eight-panel result shows the roll-up at `t = 0.5`, pairing
+at `t = 1.0`, and two paired vortices at `t = 1.5`:
+
+- [Vorticity and velocity snapshots](./outputs/dns_single_layer_freeslip/single_shear_layer_vorticity.png)
+- [Compressed DNS fields and diagnostics](./outputs/dns_single_layer_freeslip/single_shear_layer_snapshots.npz)
+
+Regenerate the production result with:
+
+```bash
+python mixing_layer_dns.py --output-dir outputs/dns_single_layer_freeslip
+```
+
+## Bosonic MPS Chorin/MAC solver (periodic comparison)
 
 [`mixing_layer_mps_mac.jl`](./mixing_layer_mps_mac.jl) follows the bosonic-MPS
 procedure in `ldc.jl`, but implements a periodic staggered Chorin projection
@@ -61,40 +86,10 @@ python plot_mps_dns_comparison.py /path/to/mixing_layer_mps_mac.jld2 \
   outputs/mps_dns_16x16_re50_pe50_scalar_delta012 --re 50 --pe 50
 ```
 
-## Classical 128×128 DNS reference
-
-This project solves the hydrodynamic incompressible Navier--Stokes equations for
-a periodic double mixing layer on a `128 x 128` marker-and-cell (MAC) grid.  It
-uses Chorin's fractional-step pressure projection and produces eight vorticity
-snapshots with velocity arrows.
-
-## Requested case
-
-- `Nx = Ny = 128`, `dx = dy = 1/128`, so `Lx = Ly = 1`.
-- Periodic boundary conditions in both directions.
-- `Re = UL/nu = 1000` with `U = L = 1`, hence `nu = 0.001`.
-- Bottom and top streams have `u = -1`; the middle stream has `u = +1`.
-- The thinner middle layer occupies `0.30 Ly`, placing its interfaces at
-  `y = 0.35` and `y = 0.65`; each transition has thickness `delta = 0.03`.
-- A localized, divergence-free KH seed contains a dominant streamwise mode 2
-  and a weaker mode-1 subharmonic to encourage later vortex pairing.
-
-The double-tanh profile is
-
-```text
-u0(y) = tanh[(y-y1)/delta] - tanh[(y-y2)/delta] - 1,
-y1 = (1-f) Ly/2,  y2 = (1+f) Ly/2,  f = 0.30.
-```
-
-The tails are saturated at the periodic seam, and the values match there by
-symmetry. Because unequal layer widths give a nonzero mean velocity, the code
-builds the mean-zero part from the streamfunction and then restores the uniform
-mean; this retains the requested `-1/+1/-1` plateaus without affecting discrete
-incompressibility.
-
 ## MAC layout and Chorin projection
 
-Every field stores one periodic copy in an array of shape `(Ny, Nx)`:
+Pressure and `u` have shape `(Ny, Nx)`. The normal velocity contains both
+physical boundary faces and has shape `(Ny + 1, Nx)`:
 
 ```text
              v[j+1,i]
@@ -106,7 +101,7 @@ Every field stores one periodic copy in an array of shape `(Ny, Nx)`:
 
 p[j,i] : ((i+1/2) dx, (j+1/2) dy)
 u[j,i] : ( i      dx, (j+1/2) dy)
-v[j,i] : ((i+1/2) dx,  j      dy)
+v[j,i] : ((i+1/2) dx,  j      dy),  j = 0, ..., Ny
 ```
 
 At each midpoint stage the code:
@@ -116,10 +111,11 @@ At each midpoint stage the code:
 2. solves `laplacian(p) = divergence(u*) / dt` at cell centers;
 3. applies `u = u* - dt grad(p)` on the faces.
 
-The Poisson solve uses an FFT only as a periodic linear solver.  Its symbols are
-the eigenvalues of the *discrete* five-point Laplacian, so the MAC divergence is
-removed to roundoff.  The momentum operators themselves are finite differences,
-not pseudo-spectral derivatives.
+The pressure solve diagonalizes the discrete five-point Laplacian with an FFT
+in periodic `x` and a DCT-II in bounded `y`. These transforms are linear
+solvers; momentum advection and diffusion remain second-order finite-volume
+differences. The projection removes MAC divergence to roundoff while retaining
+zero normal pressure gradient and zero boundary-normal velocity.
 
 The initial velocity is obtained as the discrete curl of a vertex-centered
 streamfunction.  It is therefore discretely divergence-free even before the
@@ -135,11 +131,11 @@ python mixing_layer_dns.py
 ```
 
 The default run advances to `t = 3.5`, lands exactly on eight evenly spaced
-output times, and writes:
+output times, and writes to the selected output directory:
 
 ```text
-outputs/mixing_layer_mac_vorticity.png
-outputs/mixing_layer_mac_snapshots.npz
+single_shear_layer_vorticity.png
+single_shear_layer_snapshots.npz
 ```
 
 The compressed data file contains all eight face-velocity fields, pressure,
@@ -151,34 +147,21 @@ the final time or omit the data file:
 python mixing_layer_dns.py --t-end 2.0 --no-data
 ```
 
-For a coarse reference using the MPS grid, Reynolds number, and transition
-thickness:
+The old periodic double-layer DNS remains available for reproducing the MPS
+comparison or earlier reference outputs:
 
 ```bash
-python mixing_layer_dns.py --nx 32 --ny 32 --re 100 \
-  --transition-thickness 0.06 --output-dir outputs/dns_32x32_re100
-```
-
-To use the same KH seed parameters as the MPS case, add:
-
-```bash
---perturbation-width 0.10 --kh-mode 1 --kh-amplitude 0.10 \
-  --secondary-mode 2 --secondary-amplitude 0.025
-```
-
-The middle width is exposed as a command-line parameter, for example:
-
-```bash
-python mixing_layer_dns.py --middle-layer-fraction 0.25
+python mixing_layer_dns.py --periodic-y --nx 128 --ny 128 --re 1000 \
+  --transition-thickness 0.03 --kh-mode 2 --kh-amplitude 0.02 \
+  --secondary-mode 1 --secondary-amplitude 0.005
 ```
 
 ## Tests
 
-The tests cover the staggered operator adjoint identity, the discrete Poisson
-equation, projection accuracy and energy orthogonality, pure-gradient removal,
-the divergence-free KH initialization, conservative scalar fluxes and mass,
-the sampled double-tanh concentration, coupled midpoint evolution, the
-requested mean velocity profile, and exact eight-snapshot scheduling.
+The tests cover both boundary treatments: discrete Poisson equations,
+gradient/divergence composition, projection accuracy, free-slip wall values,
+inviscid energy conservation, divergence-free initialization, periodic scalar
+conservation, and exact eight-snapshot scheduling.
 
 ```bash
 python -m unittest discover -s test -p 'test_*.py' -v

@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
-"""Two-dimensional incompressible mixing-layer DNS on a periodic MAC grid.
+"""Two-dimensional incompressible mixing-layer DNS on a MAC grid.
 
 The velocity equations are advanced with a second-order midpoint method.  Each
 stage uses Chorin's fractional-step projection: an explicit tentative velocity
 is formed, a cell-centered pressure Poisson equation is solved, and the normal
 face velocities are corrected to make the discrete divergence zero.
 
-All arrays have shape ``(ny, nx)`` and store one copy of each periodic degree
-of freedom:
+The production DNS is periodic in ``x`` and uses free-slip boundaries in ``y``:
+the tangential velocity has zero normal gradient and the normal velocity is
+zero at the boundary.  It contains one centered tanh shear layer.  Pressure has
+the compatible zero-normal-gradient boundary condition, and its Poisson
+equation is inverted with a Fourier transform in ``x`` and a cosine transform
+in ``y``.
+
+The older fully periodic operators remain available for the matched MPS
+comparison.  In that layout all arrays have shape ``(ny, nx)`` and store one
+copy of each periodic degree of freedom:
 
 * ``p[j, i]`` is at the cell center ``((i+1/2) dx, (j+1/2) dy)``;
 * ``u[j, i]`` is at the west/east face ``(i dx, (j+1/2) dy)``;
 * ``v[j, i]`` is at the south/north face ``((i+1/2) dx, j dy)``.
 
-The periodic pressure equation is inverted with an FFT using the eigenvalues
+The fully periodic pressure equation is inverted with an FFT using the eigenvalues
 of the *discrete* five-point Laplacian.  Spatial derivatives in the momentum
 equations remain second-order finite differences on the staggered grid.
 
@@ -31,6 +39,8 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 import numpy as np
+from scipy.fft import dct, idct
+
 try:
     from numpy.typing import NDArray
 except ImportError:  # NumPy 1.20 on the cluster predates numpy.typing.NDArray.
@@ -44,21 +54,23 @@ Array = np.ndarray if NDArray is None else NDArray[np.float64]
 class SimulationConfig:
     """Physical and numerical parameters for the mixing-layer calculation."""
 
-    nx: int = 128
-    ny: int = 128
-    dx: float = 1.0 / 128.0
-    dy: float = 1.0 / 128.0
-    reynolds: float = 1000.0
+    nx: int = 256
+    ny: int = 256
+    dx: float = 1.0 / 256.0
+    dy: float = 1.0 / 256.0
+    reynolds: float = 5000.0
     peclet: float | None = None
     reference_velocity: float = 1.0
+    boundary_y: str = "free-slip"
+    shear_center_fraction: float = 0.50
     middle_layer_fraction: float = 0.30
-    transition_thickness: float = 0.03
-    perturbation_width: float = 0.06
-    perturbation_mode: int = 2
-    perturbation_amplitude: float = 0.020
-    subharmonic_mode: int = 1
-    subharmonic_amplitude: float = 0.005
-    perturbation_phase: float = np.pi / 5.0
+    transition_thickness: float = 0.02
+    perturbation_width: float = 0.08
+    perturbation_mode: int = 4
+    perturbation_amplitude: float = 0.080
+    subharmonic_mode: int = 2
+    subharmonic_amplitude: float = 0.002
+    perturbation_phase: float = np.pi / 3.0
     cfl: float = 0.35
     diffusion_safety: float = 0.80
     max_dt: float = 0.0025
@@ -76,6 +88,10 @@ class SimulationConfig:
             raise ValueError("peclet must be positive")
         if self.transition_thickness <= 0.0 or self.perturbation_width <= 0.0:
             raise ValueError("layer thicknesses must be positive")
+        if self.boundary_y not in {"periodic", "free-slip"}:
+            raise ValueError("boundary_y must be 'periodic' or 'free-slip'")
+        if not (0.0 < self.shear_center_fraction < 1.0):
+            raise ValueError("shear_center_fraction must lie in (0, 1)")
         if not (0.0 < self.middle_layer_fraction < 1.0):
             raise ValueError("middle_layer_fraction must lie in (0, 1)")
         if self.perturbation_mode <= 0 or self.subharmonic_mode <= 0:
@@ -191,6 +207,94 @@ def project_velocity(
     return u, v, pressure
 
 
+def channel_divergence(u: Array, v: Array, dx: float, dy: float) -> Array:
+    """MAC divergence for periodic ``x`` and bounded ``y``.
+
+    ``u`` has shape ``(ny, nx)`` and ``v`` includes both physical boundary
+    faces, so it has shape ``(ny + 1, nx)``.
+    """
+
+    if v.shape != (u.shape[0] + 1, u.shape[1]):
+        raise ValueError("channel v must have shape (ny + 1, nx)")
+    return (
+        (np.roll(u, -1, axis=1) - u) / dx
+        + (v[1:, :] - v[:-1, :]) / dy
+    )
+
+
+def channel_pressure_gradient(
+    pressure: Array, dx: float, dy: float
+) -> tuple[Array, Array]:
+    """Pressure gradient with homogeneous Neumann conditions in ``y``."""
+
+    grad_x = (pressure - np.roll(pressure, 1, axis=1)) / dx
+    grad_y = np.zeros((pressure.shape[0] + 1, pressure.shape[1]), dtype=pressure.dtype)
+    grad_y[1:-1, :] = (pressure[1:, :] - pressure[:-1, :]) / dy
+    return grad_x, grad_y
+
+
+def channel_neumann_laplacian(field: Array, dx: float, dy: float) -> Array:
+    """Five-point Laplacian, periodic in ``x`` and zero-gradient in ``y``."""
+
+    result = (
+        np.roll(field, -1, axis=1) - 2.0 * field + np.roll(field, 1, axis=1)
+    ) / dx**2
+    result[1:-1, :] += (
+        field[2:, :] - 2.0 * field[1:-1, :] + field[:-2, :]
+    ) / dy**2
+    result[0, :] += (field[1, :] - field[0, :]) / dy**2
+    result[-1, :] += (field[-2, :] - field[-1, :]) / dy**2
+    return result
+
+
+def solve_channel_poisson(rhs: Array, dx: float, dy: float) -> Array:
+    """Solve the mean-zero discrete Poisson equation with Neumann ``y`` BCs."""
+
+    ny, nx = rhs.shape
+    compatible_rhs = rhs - np.mean(rhs)
+    # DCT-II diagonalizes the cell-centered Neumann second difference.  The
+    # streamwise operator remains periodic and is diagonalized by an FFT.
+    rhs_modes_y = dct(compatible_rhs, type=2, axis=0, norm="ortho")
+    rhs_hat = np.fft.fft(rhs_modes_y, axis=1)
+    mode_x = np.fft.fftfreq(nx)
+    mode_y = np.arange(ny, dtype=float)
+    lambda_x = -4.0 * np.sin(np.pi * mode_x) ** 2 / dx**2
+    lambda_y = -4.0 * np.sin(0.5 * np.pi * mode_y / ny) ** 2 / dy**2
+    eigenvalues = lambda_y[:, None] + lambda_x[None, :]
+    pressure_hat = np.zeros_like(rhs_hat)
+    nonzero = eigenvalues != 0.0
+    pressure_hat[nonzero] = rhs_hat[nonzero] / eigenvalues[nonzero]
+    pressure_hat[0, 0] = 0.0
+    pressure_modes_y = np.fft.ifft(pressure_hat, axis=1).real
+    pressure = idct(pressure_modes_y, type=2, axis=0, norm="ortho")
+    return pressure - np.mean(pressure)
+
+
+def project_channel_velocity(
+    u_star: Array,
+    v_star: Array,
+    dt: float,
+    dx: float,
+    dy: float,
+) -> tuple[Array, Array, Array]:
+    """Project channel velocity with Neumann pressure and impermeable walls."""
+
+    if dt <= 0.0:
+        raise ValueError("projection dt must be positive")
+    if v_star.shape != (u_star.shape[0] + 1, u_star.shape[1]):
+        raise ValueError("channel v must have shape (ny + 1, nx)")
+    v_star = v_star.copy()
+    v_star[[0, -1], :] = 0.0
+    pressure = solve_channel_poisson(
+        channel_divergence(u_star, v_star, dx, dy) / dt, dx, dy
+    )
+    grad_x, grad_y = channel_pressure_gradient(pressure, dx, dy)
+    u = u_star - dt * grad_x
+    v = v_star - dt * grad_y
+    v[[0, -1], :] = 0.0
+    return u, v, pressure
+
+
 def conservative_advection(u: Array, v: Array, dx: float, dy: float) -> tuple[Array, Array]:
     """Second-order centered momentum-flux divergence on the MAC grid.
 
@@ -228,6 +332,68 @@ def conservative_advection(u: Array, v: Array, dx: float, dy: float) -> tuple[Ar
         + (v_n**2 - v_s**2) / dy
     )
     return advection_u, advection_v
+
+
+def channel_conservative_advection(
+    u: Array, v: Array, dx: float, dy: float
+) -> tuple[Array, Array]:
+    """Centered MAC momentum fluxes for periodic ``x`` and free-slip ``y``."""
+
+    ny, nx = u.shape
+    if v.shape != (ny + 1, nx):
+        raise ValueError("channel v must have shape (ny + 1, nx)")
+
+    u_e = 0.5 * (u + np.roll(u, -1, axis=1))
+    u_w = 0.5 * (np.roll(u, 1, axis=1) + u)
+
+    # u interpolated from its cell-centered y locations to the y faces.  At
+    # the physical faces the copied value is the zero-normal-gradient ghost
+    # construction.
+    u_at_y_face = np.empty_like(v)
+    u_at_y_face[0, :] = u[0, :]
+    u_at_y_face[-1, :] = u[-1, :]
+    u_at_y_face[1:-1, :] = 0.5 * (u[:-1, :] + u[1:, :])
+    v_at_x_face = 0.5 * (v + np.roll(v, 1, axis=1))
+    uv_flux = u_at_y_face * v_at_x_face
+    advection_u = (
+        (u_e**2 - u_w**2) / dx
+        + (uv_flux[1:, :] - uv_flux[:-1, :]) / dy
+    )
+
+    # Fluxes for the interior v control volumes.  Boundary v is prescribed,
+    # so its right-hand side remains exactly zero.
+    advection_v = np.zeros_like(v)
+    v_e = 0.5 * (v + np.roll(v, -1, axis=1))
+    v_w = 0.5 * (np.roll(v, 1, axis=1) + v)
+    u_at_east = np.roll(u_at_y_face, -1, axis=1)
+    uv_x_flux_e = u_at_east * v_e
+    uv_x_flux_w = u_at_y_face * v_w
+    v_n = 0.5 * (v[1:-1, :] + v[2:, :])
+    v_s = 0.5 * (v[:-2, :] + v[1:-1, :])
+    advection_v[1:-1, :] = (
+        (uv_x_flux_e[1:-1, :] - uv_x_flux_w[1:-1, :]) / dx
+        + (v_n**2 - v_s**2) / dy
+    )
+    return advection_u, advection_v
+
+
+def channel_velocity_laplacian(
+    u: Array, v: Array, dx: float, dy: float
+) -> tuple[Array, Array]:
+    """Velocity Laplacians for free-slip tangential and zero normal flow."""
+
+    lap_u = channel_neumann_laplacian(u, dx, dy)
+    lap_v = np.zeros_like(v)
+    lap_v[1:-1, :] = (
+        (
+            np.roll(v[1:-1, :], -1, axis=1)
+            - 2.0 * v[1:-1, :]
+            + np.roll(v[1:-1, :], 1, axis=1)
+        )
+        / dx**2
+        + (v[2:, :] - 2.0 * v[1:-1, :] + v[:-2, :]) / dy**2
+    )
+    return lap_u, lap_v
 
 
 def conservative_scalar_advection(
@@ -289,6 +455,32 @@ def momentum_rhs(
     return rhs_u, rhs_v
 
 
+def channel_momentum_rhs(
+    u: Array,
+    v: Array,
+    viscosity: float,
+    dx: float,
+    dy: float,
+) -> tuple[Array, Array]:
+    """Pressure-free momentum right-hand side with free-slip ``y`` walls."""
+
+    advection_u, advection_v = channel_conservative_advection(u, v, dx, dy)
+    lap_u, lap_v = channel_velocity_laplacian(u, v, dx, dy)
+    rhs_u = -advection_u + viscosity * lap_u
+    rhs_v = -advection_v + viscosity * lap_v
+    rhs_v[[0, -1], :] = 0.0
+    return rhs_u, rhs_v
+
+
+def single_tanh_profile(y: Array, config: SimulationConfig) -> Array:
+    """Single ``-U/+U`` shear layer centered in the bounded domain."""
+
+    center = config.shear_center_fraction * config.ly
+    return config.reference_velocity * np.tanh(
+        (y - center) / config.transition_thickness
+    )
+
+
 def periodic_double_tanh_profile(y: Array, config: SimulationConfig) -> Array:
     """Periodic -1/+1/-1 double layer with two resolved tanh transitions."""
 
@@ -325,7 +517,7 @@ def initialize_concentration(config: SimulationConfig) -> Array:
     return np.repeat(normalized[:, None], config.nx, axis=1)
 
 
-def initialize_velocity(config: SimulationConfig) -> tuple[Array, Array, Array]:
+def initialize_periodic_velocity(config: SimulationConfig) -> tuple[Array, Array, Array]:
     """Construct a discretely divergence-free double shear layer plus KH seed.
 
     A streamfunction is stored at cell vertices.  Taking its discrete curl puts
@@ -374,6 +566,49 @@ def initialize_velocity(config: SimulationConfig) -> tuple[Array, Array, Array]:
     return u, v, pressure
 
 
+def initialize_channel_velocity(config: SimulationConfig) -> tuple[Array, Array, Array]:
+    """Build a divergence-free single shear layer with wall-localized KH seeds."""
+
+    x_vertices = np.arange(config.nx, dtype=float) * config.dx
+    y_faces = np.arange(config.ny + 1, dtype=float) * config.dy
+    y_u = (np.arange(config.ny, dtype=float) + 0.5) * config.dy
+
+    base_u = single_tanh_profile(y_u, config)
+    base_streamfunction = np.empty(config.ny + 1, dtype=float)
+    base_streamfunction[0] = 0.0
+    base_streamfunction[1:] = config.dy * np.cumsum(base_u)
+
+    x_mesh, y_mesh = np.meshgrid(x_vertices, y_faces)
+    center = config.shear_center_fraction * config.ly
+    envelope = np.exp(-((y_mesh - center) / config.perturbation_width) ** 2)
+    # Make the impermeability condition exact rather than relying on the tiny
+    # Gaussian tails at the two boundaries.
+    envelope[[0, -1], :] = 0.0
+    dominant_k = 2.0 * np.pi * config.perturbation_mode / config.lx
+    subharmonic_k = 2.0 * np.pi * config.subharmonic_mode / config.lx
+    perturbation_streamfunction = envelope * (
+        config.perturbation_amplitude / dominant_k * np.cos(dominant_k * x_mesh)
+        + config.subharmonic_amplitude
+        / subharmonic_k
+        * np.cos(subharmonic_k * x_mesh + config.perturbation_phase)
+    )
+    streamfunction = base_streamfunction[:, None] + perturbation_streamfunction
+
+    u = (streamfunction[1:, :] - streamfunction[:-1, :]) / config.dy
+    v = -(np.roll(streamfunction, -1, axis=1) - streamfunction) / config.dx
+    v[[0, -1], :] = 0.0
+    pressure = np.zeros((config.ny, config.nx), dtype=float)
+    return u, v, pressure
+
+
+def initialize_velocity(config: SimulationConfig) -> tuple[Array, Array, Array]:
+    """Initialize either the single-layer channel or legacy periodic case."""
+
+    if config.boundary_y == "free-slip":
+        return initialize_channel_velocity(config)
+    return initialize_periodic_velocity(config)
+
+
 def advance_one_step(
     u: Array,
     v: Array,
@@ -381,6 +616,24 @@ def advance_one_step(
     config: SimulationConfig,
 ) -> tuple[Array, Array, Array]:
     """Second-order midpoint update with a Chorin projection at each stage."""
+
+    if config.boundary_y == "free-slip":
+        rhs_u, rhs_v = channel_momentum_rhs(
+            u, v, config.viscosity, config.dx, config.dy
+        )
+        u_half_star = u + 0.5 * dt * rhs_u
+        v_half_star = v + 0.5 * dt * rhs_v
+        u_half, v_half, _ = project_channel_velocity(
+            u_half_star, v_half_star, 0.5 * dt, config.dx, config.dy
+        )
+        rhs_u_half, rhs_v_half = channel_momentum_rhs(
+            u_half, v_half, config.viscosity, config.dx, config.dy
+        )
+        u_star = u + dt * rhs_u_half
+        v_star = v + dt * rhs_v_half
+        return project_channel_velocity(
+            u_star, v_star, dt, config.dx, config.dy
+        )
 
     rhs_u, rhs_v = momentum_rhs(u, v, config.viscosity, config.dx, config.dy)
     u_half_star = u + 0.5 * dt * rhs_u
@@ -405,6 +658,9 @@ def advance_one_step_with_scalar(
     config: SimulationConfig,
 ) -> tuple[Array, Array, Array, Array]:
     """Second-order midpoint update of velocity and its passive scalar."""
+
+    if config.boundary_y != "periodic":
+        raise ValueError("the matched passive-scalar path requires periodic y")
 
     rhs_u, rhs_v = momentum_rhs(u, v, config.viscosity, config.dx, config.dy)
     u_half_star = u + 0.5 * dt * rhs_u
@@ -455,6 +711,11 @@ def stable_timestep(u: Array, v: Array, config: SimulationConfig) -> float:
 def vorticity(u: Array, v: Array, dx: float, dy: float) -> Array:
     """Vertex-centered scalar vorticity ``dv/dx - du/dy``."""
 
+    if v.shape == (u.shape[0] + 1, u.shape[1]):
+        du_dy = np.zeros_like(v)
+        du_dy[1:-1, :] = (u[1:, :] - u[:-1, :]) / dy
+        return (v - np.roll(v, 1, axis=1)) / dx - du_dy
+
     return (
         (v - np.roll(v, 1, axis=1)) / dx
         - (u - np.roll(u, 1, axis=0)) / dy
@@ -465,7 +726,10 @@ def cell_centered_velocity(u: Array, v: Array) -> tuple[Array, Array]:
     """Interpolate staggered velocities to pressure-cell centers."""
 
     u_center = 0.5 * (u + np.roll(u, -1, axis=1))
-    v_center = 0.5 * (v + np.roll(v, -1, axis=0))
+    if v.shape == (u.shape[0] + 1, u.shape[1]):
+        v_center = 0.5 * (v[:-1, :] + v[1:, :])
+    else:
+        v_center = 0.5 * (v + np.roll(v, -1, axis=0))
     return u_center, v_center
 
 
@@ -473,14 +737,19 @@ def flow_diagnostics(u: Array, v: Array, config: SimulationConfig) -> dict[str, 
     """Compute compact resolution and incompressibility diagnostics."""
 
     omega = vorticity(u, v, config.dx, config.dy)
-    div = divergence(u, v, config.dx, config.dy)
+    if config.boundary_y == "free-slip":
+        div = channel_divergence(u, v, config.dx, config.dy)
+        _, v_for_energy = cell_centered_velocity(u, v)
+    else:
+        div = divergence(u, v, config.dx, config.dy)
+        v_for_energy = v
     return {
-        "kinetic_energy": 0.5 * float(np.mean(u**2 + v**2)),
-        "cross_stream_energy": 0.5 * float(np.mean(v**2)),
+        "kinetic_energy": 0.5 * float(np.mean(u**2 + v_for_energy**2)),
+        "cross_stream_energy": 0.5 * float(np.mean(v_for_energy**2)),
         "enstrophy": 0.5 * float(np.mean(omega**2)),
         "max_divergence": float(np.max(np.abs(div))),
         "mean_u": float(np.mean(u)),
-        "mean_v": float(np.mean(v)),
+        "mean_v": float(np.mean(v_for_energy)),
         "max_speed_component": float(max(np.max(np.abs(u)), np.max(np.abs(v)))),
     }
 
@@ -564,7 +833,7 @@ def plot_snapshots(
     arrow_stride_x = max(1, config.nx // 8)
     arrow_stride_y = max(1, config.ny // 8)
 
-    for axis, snapshot, omega in zip(axes.flat, snapshots, omega_fields, strict=True):
+    for axis, snapshot, omega in zip(axes.flat, snapshots, omega_fields):
         image = axis.imshow(
             omega,
             origin="lower",
@@ -603,13 +872,21 @@ def plot_snapshots(
 
     colorbar = fig.colorbar(images[0], ax=axes, shrink=0.90, pad=0.015)
     colorbar.set_label(r"vorticity $\omega = \partial_x v - \partial_y u$")
-    fig.suptitle(
-        "2-D periodic mixing layer: MAC grid + Chorin projection\n"
-        f"Re = {config.reynolds:g},  {config.nx} x {config.ny},  "
-        f"dx = dy = {config.dx:.6f},  middle layer = "
-        f"{config.middle_layer_fraction:.2f} Ly",
-        fontsize=14,
-    )
+    if config.boundary_y == "free-slip":
+        title = (
+            "Single shear layer: periodic x, free-slip y (zero-gradient u)\n"
+            f"Re = {config.reynolds:g},  {config.nx} x {config.ny},  "
+            f"shear thickness = {config.transition_thickness:g},  "
+            f"KH modes = {config.perturbation_mode} + {config.subharmonic_mode}"
+        )
+    else:
+        title = (
+            "2-D periodic double mixing layer: MAC grid + Chorin projection\n"
+            f"Re = {config.reynolds:g},  {config.nx} x {config.ny},  "
+            f"dx = dy = {config.dx:.6f},  middle layer = "
+            f"{config.middle_layer_fraction:.2f} Ly"
+        )
+    fig.suptitle(title, fontsize=14)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
@@ -680,7 +957,7 @@ def parse_arguments() -> argparse.Namespace:
         "--ny",
         type=int,
         default=None,
-        help="number of periodic cells in y; dy is adjusted to keep Ly=1",
+        help="number of cells in y; dy is adjusted to keep Ly=1",
     )
     parser.add_argument(
         "--re",
@@ -699,6 +976,17 @@ def parse_arguments() -> argparse.Namespace:
         type=float,
         default=None,
         help="override the default final nondimensional time 3.5",
+    )
+    parser.add_argument(
+        "--periodic-y",
+        action="store_true",
+        help="run the legacy periodic double shear layer instead",
+    )
+    parser.add_argument(
+        "--shear-center",
+        type=float,
+        default=None,
+        help="single-layer center divided by Ly (default: 0.50)",
     )
     parser.add_argument(
         "--middle-layer-fraction",
@@ -753,6 +1041,25 @@ def parse_arguments() -> argparse.Namespace:
 def main() -> None:
     args = parse_arguments()
     config = SimulationConfig()
+    if args.periodic_y:
+        # Preserve the original double-layer CLI defaults for reproducibility;
+        # explicit command-line overrides below still take precedence.
+        config = replace(
+            config,
+            nx=128,
+            ny=128,
+            dx=1.0 / 128.0,
+            dy=1.0 / 128.0,
+            reynolds=1000.0,
+            boundary_y="periodic",
+            transition_thickness=0.03,
+            perturbation_width=0.06,
+            perturbation_mode=2,
+            perturbation_amplitude=0.020,
+            subharmonic_mode=1,
+            subharmonic_amplitude=0.005,
+            perturbation_phase=np.pi / 5.0,
+        )
     nx = config.nx if args.nx is None else args.nx
     ny = config.ny if args.ny is None else args.ny
     config = replace(
@@ -768,6 +1075,8 @@ def main() -> None:
         config = replace(config, peclet=args.pe)
     if args.t_end is not None:
         config = replace(config, t_end=args.t_end)
+    if args.shear_center is not None:
+        config = replace(config, shear_center_fraction=args.shear_center)
     if args.middle_layer_fraction is not None:
         config = replace(config, middle_layer_fraction=args.middle_layer_fraction)
     if args.transition_thickness is not None:
@@ -783,22 +1092,30 @@ def main() -> None:
     if args.secondary_amplitude is not None:
         config = replace(config, subharmonic_amplitude=args.secondary_amplitude)
 
+    boundary_label = (
+        "periodic-x/free-slip-y single-layer"
+        if config.boundary_y == "free-slip"
+        else "fully-periodic double-layer"
+    )
     print(
-        f"Running {config.nx}x{config.ny} periodic MAC DNS: "
+        f"Running {config.nx}x{config.ny} {boundary_label} MAC DNS: "
         f"Re={config.reynolds:g}, Pe={config.effective_peclet:g}, "
         f"nu={config.viscosity:.6g}, kappa={config.scalar_diffusivity:.6g}, "
         f"t_end={config.t_end:g}"
     )
     snapshots = run_simulation(config, progress=_progress)
 
-    figure_path = args.output_dir / "mixing_layer_mac_vorticity.png"
-    plot_snapshots(snapshots, config, figure_path)
-    print(f"saved figure: {figure_path}")
-
+    output_stem = (
+        "single_shear_layer" if config.boundary_y == "free-slip" else "mixing_layer_mac"
+    )
     if not args.no_data:
-        data_path = args.output_dir / "mixing_layer_mac_snapshots.npz"
+        data_path = args.output_dir / f"{output_stem}_snapshots.npz"
         save_snapshots(snapshots, config, data_path)
         print(f"saved data:   {data_path}")
+
+    figure_path = args.output_dir / f"{output_stem}_vorticity.png"
+    plot_snapshots(snapshots, config, figure_path)
+    print(f"saved figure: {figure_path}")
 
 
 if __name__ == "__main__":
