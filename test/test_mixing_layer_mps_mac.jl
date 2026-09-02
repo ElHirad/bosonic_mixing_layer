@@ -11,6 +11,71 @@ include(joinpath(@__DIR__, "..", "mixing_layer_mps_mac.jl"))
     end
 end
 
+@testset "free-slip channel MAC compatibility" begin
+    n = 7
+    h = 1 / n
+    Random.seed!(20260901)
+    p = randn(n, n)
+    u = randn(n, n)
+    v = randn(n, n)
+    v[1, :] .= 0.0
+    gx, gy = channel_mac_pressure_gradient(p, h)
+    lhs = sum(p .* channel_mac_divergence(u, v, h))
+    rhs = -sum(gx .* u .+ gy .* v)
+    @test lhs ≈ rhs atol=1e-11 rtol=1e-11
+    @test channel_mac_divergence(gx, gy, h) ≈
+        channel_neumann_laplacian(p, h) atol=1e-11 rtol=1e-11
+
+    psi = randn(n + 1, n)
+    psi[1, :] .= 0.0
+    psi[end, :] .= 0.0
+    u_divfree = zeros(n, n)
+    v_divfree = zeros(n, n)
+    for j in 1:n, i in 1:n
+        ip = next_index(i, n)
+        u_divfree[j, i] = (psi[j + 1, i] - psi[j, i]) / h
+        v_divfree[j, i] = -(psi[j, ip] - psi[j, i]) / h
+    end
+    advection_u, advection_v = channel_mac_conservative_advection(
+        u_divfree, v_divfree, h,
+    )
+    @test maximum(abs.(channel_mac_divergence(u_divfree, v_divfree, h))) < 1e-11
+    @test abs(sum(u_divfree .* advection_u .+ v_divfree .* advection_v)) < 1e-9
+
+    scalar = randn(n, n)
+    scalar_advection = channel_mac_conservative_scalar_advection(
+        u_divfree, v_divfree, scalar, h,
+    )
+    @test abs(sum(scalar_advection)) < 1e-10
+    @test abs(sum(channel_neumann_laplacian(scalar, h))) < 1e-10
+end
+
+@testset "16x16 free-slip roll-up initialization" begin
+    config = MPSMACConfig(
+        n=16,
+        reynolds=50.0,
+        peclet=50.0,
+        boundary_y="free-slip",
+        transition_thickness=0.04,
+        kh_width=0.12,
+        kh_mode=2,
+        kh_amplitude=2.5,
+        secondary_mode=1,
+        secondary_amplitude=0.5,
+        kh_phase=0.0,
+        final_time=0.65,
+    )
+    fields = validate_initial_fields(config; verbose=false)
+    @test maximum(abs.(channel_mac_divergence(
+        fields.u, fields.v, grid_spacing(config),
+    ))) < 1e-12
+    @test all(iszero, fields.v[1, :])
+    @test minimum(fields.scalar) ≈ 0.0 atol=1e-14
+    @test maximum(fields.scalar) ≈ 1.0 atol=1e-14
+    @test mean(fields.scalar) ≈ 0.5 atol=1e-14
+    @test max(maximum(abs.(fields.u)), maximum(abs.(fields.v))) > 2.5
+end
+
 @testset "periodic MAC operator compatibility" begin
     n = 7
     h = 1 / n
@@ -137,6 +202,26 @@ end
     @test after_gy ≈ before_gy atol=1e-13 rtol=1e-13
     @test maxlinkdim(centered) == maxlinkdim(shifted)
     @test norm(centered) ≈ 1 atol=1e-13
+end
+
+@testset "conserved scalar mean projection" begin
+    config = smoke_config()
+    initial = initial_mac_fields(config)
+    shifted_initial = merge(initial, (; scalar=initial.scalar .+ 0.01))
+    sites = siteinds("MACBoson", 4config.n^2; conserve_qns=false)
+    shifted = build_initial_mps(shifted_initial, sites, config)
+    before = field_expectations(shifted, config)
+
+    corrected, after = enforce_scalar_mass(shifted, before, config)
+    relative_mass_error = abs(
+        mean(after.scalar) - scalar_reference_mass(config),
+    ) / scalar_reference_mass(config)
+
+    @test relative_mass_error <= SCALAR_MASS_PROJECTION_TARGET
+    @test relative_velocity_difference(before, after) < 1e-13
+    @test after.phi ≈ before.phi atol=1e-13 rtol=1e-13
+    @test maxlinkdim(corrected) == maxlinkdim(shifted)
+    @test norm(corrected) ≈ 1 atol=1e-13
 end
 
 @testset "one-site predictor regression" begin

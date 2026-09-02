@@ -1,31 +1,13 @@
 # 2-D incompressible mixing-layer solvers
 
-## Single-layer DNS with free-slip y boundaries (current deliverable)
+## Finite-amplitude 16×16 single-layer DNS
 
-[`mixing_layer_dns.py`](./mixing_layer_dns.py) now runs one centered shear layer
-instead of the periodic double layer. The production case uses a `256 x 256`
-MAC grid, periodicity only in `x`, and free-slip boundaries in `y`:
+[`mixing_layer_dns.py`](./mixing_layer_dns.py) runs one centered shear layer on
+a MAC grid, with periodicity only in `x` and free-slip boundaries in `y`:
 
 ```text
 du/dy = 0,  v = 0,  dp/dy = 0  at y = 0, Ly.
 ```
-
-The initial profile is `u0(y) = tanh[(y - Ly/2)/delta]`, with the reduced
-thickness `delta = 0.02`. At `Re = 5000`, a mode-4 Kelvin--Helmholtz seed rolls
-into four vortices and a weak mode-2 subharmonic produces a visible four-to-two
-pairing. The saved eight-panel result shows the roll-up at `t = 0.5`, pairing
-at `t = 1.0`, and two paired vortices at `t = 1.5`:
-
-- [Vorticity and velocity snapshots](./outputs/dns_single_layer_freeslip/single_shear_layer_vorticity.png)
-- [Compressed DNS fields and diagnostics](./outputs/dns_single_layer_freeslip/single_shear_layer_snapshots.npz)
-
-Regenerate the production result with:
-
-```bash
-python mixing_layer_dns.py --output-dir outputs/dns_single_layer_freeslip
-```
-
-### Finite-amplitude 16×16, Re=50 case
 
 At `16 x 16` and `Re=50`, small KH disturbances are viscously damped. A
 strongly nonlinear mode-2 seed (`A2=2.5`) plus its mode-1 pairing subharmonic
@@ -50,16 +32,16 @@ python mixing_layer_dns.py --nx 16 --ny 16 --re 50 \
   --output-dir outputs/dns_single_layer_16x16_re50_finite_amplitude
 ```
 
-## Bosonic MPS Chorin/MAC solver (periodic comparison)
+## Bosonic MPS Chorin/MAC solver
 
 [`mixing_layer_mps_mac.jl`](./mixing_layer_mps_mac.jl) follows the bosonic-MPS
-procedure in `ldc.jl`, but implements a periodic staggered Chorin projection
-with interleaved `u`, `v`, pressure-impulse, and scalar sites on a `32 x 32`
-grid. The solver carries a cell-centered conserved scalar initialized to 1 in
-the middle stream and 0 in both outer streams through a double-tanh shear. The
-coarse visible-mixing default is `Re=Pe=100`, and the full run schedules eight
-vorticity and concentration snapshots. Setup, numerical details, convergence
-gates, and run commands are in [`MPS_MAC_README.md`](./MPS_MAC_README.md).
+procedure in `ldc.jl`, but implements a staggered Chorin projection with
+interleaved `u`, `v`, pressure-impulse, and conserved-concentration sites. It
+supports both the legacy fully periodic double layer and the single-layer
+periodic-x/free-slip-y channel. The bounded case uses conservative zero-normal
+scalar flux and Neumann scalar diffusion at the y walls. Setup, numerical
+details, convergence gates, and run commands are in
+[`MPS_MAC_README.md`](./MPS_MAC_README.md).
 
 Quick validation:
 
@@ -81,7 +63,39 @@ case. A direct CPU run is:
 julia --project=. mixing_layer_mps_mac.jl --strict-quality --no-plot
 ```
 
-## Completed 16×16 MPS–DNS velocity and concentration comparison
+## Completed 16×16 free-slip roll-up and pairing comparison
+
+The single-layer MPS calculation completed all 260 steps at `Re=Pe=50` with
+transition thickness `0.04`, mode-2 amplitude `2.5`, and mode-1 pairing
+amplitude `0.5`. It passed the independent result validator and every strict
+per-step gate. The largest raw scalar-mean correction was `7.45e-6`, the
+largest corrected mass error was `1.00e-11`, the largest relative divergence
+was `1.24e-5`, and the largest boson-ceiling occupation was `1.74e-6`.
+
+Both MPS and matched DNS form two rollers and then merge them into one. The
+mode-1/mode-2 ratio crosses one between `t=0.3725` and `t=0.465`; at the final
+time it is `5.52` for MPS and `5.44` for DNS. At `t=0.65`, the MPS/DNS relative
+differences are `2.08%` in vorticity, `0.90%` in velocity, and `0.63%` in
+concentration.
+
+- [MPS vorticity and velocity snapshots](./outputs/mps_dns_16x16_re50_pe50_single_freeslip_delta004_largekh/mps_vorticity.png)
+- [DNS vorticity and velocity snapshots](./outputs/mps_dns_16x16_re50_pe50_single_freeslip_delta004_largekh/dns_vorticity.png)
+- [MPS concentration snapshots](./outputs/mps_dns_16x16_re50_pe50_single_freeslip_delta004_largekh/mps_concentration.png)
+- [Roll-up and pairing compatibility](./outputs/mps_dns_16x16_re50_pe50_single_freeslip_delta004_largekh/pairing_compatibility.png)
+- [Per-snapshot comparison metrics](./outputs/mps_dns_16x16_re50_pe50_single_freeslip_delta004_largekh/comparison_metrics.csv)
+
+Regenerate the matched DNS and plots from the completed MPS result with:
+
+```bash
+python plot_mps_dns_comparison.py /path/to/mixing_layer_mps_mac.jld2 \
+  outputs/mps_dns_16x16_re50_pe50_single_freeslip_delta004_largekh \
+  --re 50 --pe 50 --boundary-y free-slip --shear-center 0.5 \
+  --transition-thickness 0.04 --perturbation-width 0.12 \
+  --kh-mode 2 --kh-amplitude 2.5 \
+  --secondary-mode 1 --secondary-amplitude 0.5 --phase 0
+```
+
+## Earlier 16×16 periodic MPS–DNS comparison
 
 A production MPS trajectory was completed and independently validated for a
 `16 x 16` grid with `Re=Pe=50`, transition thickness `0.12`, KH-envelope width
@@ -186,7 +200,8 @@ python mixing_layer_dns.py --periodic-y --nx 128 --ny 128 --re 1000 \
 The tests cover both boundary treatments: discrete Poisson equations,
 gradient/divergence composition, projection accuracy, free-slip wall values,
 inviscid energy conservation, divergence-free initialization, periodic scalar
-conservation, and exact eight-snapshot scheduling.
+and wall-bounded concentration conservation, and exact eight-snapshot
+scheduling.
 
 ```bash
 python -m unittest discover -s test -p 'test_*.py' -v

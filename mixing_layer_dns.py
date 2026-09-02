@@ -427,6 +427,32 @@ def conservative_scalar_advection(
     )
 
 
+def channel_conservative_scalar_advection(
+    u: Array,
+    v: Array,
+    concentration: Array,
+    dx: float,
+    dy: float,
+) -> Array:
+    """Conservative scalar fluxes with impermeable/no-flux y walls."""
+
+    ny, nx = concentration.shape
+    if u.shape != (ny, nx) or v.shape != (ny + 1, nx):
+        raise ValueError("channel scalar requires u/c=(ny,nx), v=(ny+1,nx)")
+    concentration_e = 0.5 * (concentration + np.roll(concentration, -1, axis=1))
+    concentration_w = 0.5 * (np.roll(concentration, 1, axis=1) + concentration)
+    flux_x_e = np.roll(u, -1, axis=1) * concentration_e
+    flux_x_w = u * concentration_w
+    concentration_at_y_face = np.empty_like(v)
+    concentration_at_y_face[0, :] = concentration[0, :]
+    concentration_at_y_face[-1, :] = concentration[-1, :]
+    concentration_at_y_face[1:-1, :] = 0.5 * (
+        concentration[:-1, :] + concentration[1:, :]
+    )
+    flux_y = v * concentration_at_y_face
+    return (flux_x_e - flux_x_w) / dx + (flux_y[1:] - flux_y[:-1]) / dy
+
+
 def scalar_rhs(
     u: Array,
     v: Array,
@@ -437,9 +463,13 @@ def scalar_rhs(
 ) -> Array:
     """Conservative passive-scalar advection-diffusion right-hand side."""
 
-    return -conservative_scalar_advection(u, v, concentration, dx, dy) + (
-        diffusivity * laplacian(concentration, dx, dy)
-    )
+    if v.shape == (u.shape[0] + 1, u.shape[1]):
+        return -channel_conservative_scalar_advection(
+            u, v, concentration, dx, dy
+        ) + diffusivity * channel_neumann_laplacian(concentration, dx, dy)
+    return -conservative_scalar_advection(
+        u, v, concentration, dx, dy
+    ) + diffusivity * laplacian(concentration, dx, dy)
 
 
 def momentum_rhs(
@@ -507,10 +537,16 @@ def periodic_double_tanh_concentration(y: Array, config: SimulationConfig) -> Ar
 
 
 def initialize_concentration(config: SimulationConfig) -> Array:
-    """Return the sampled double-tanh scalar with exact 0 and 1 plateaus."""
+    """Return the sampled concentration with exact 0 and 1 plateaus."""
 
     y_centers = (np.arange(config.ny, dtype=float) + 0.5) * config.dy
-    profile = periodic_double_tanh_concentration(y_centers, config)
+    if config.boundary_y == "free-slip":
+        center = config.shear_center_fraction * config.ly
+        profile = 0.5 * (
+            1.0 + np.tanh((y_centers - center) / config.transition_thickness)
+        )
+    else:
+        profile = periodic_double_tanh_concentration(y_centers, config)
     minimum = float(np.min(profile))
     maximum = float(np.max(profile))
     if maximum <= minimum:
@@ -661,8 +697,40 @@ def advance_one_step_with_scalar(
 ) -> tuple[Array, Array, Array, Array]:
     """Second-order midpoint update of velocity and its passive scalar."""
 
-    if config.boundary_y != "periodic":
-        raise ValueError("the matched passive-scalar path requires periodic y")
+    if config.boundary_y == "free-slip":
+        rhs_u, rhs_v = channel_momentum_rhs(
+            u, v, config.viscosity, config.dx, config.dy
+        )
+        u_half_star = u + 0.5 * dt * rhs_u
+        v_half_star = v + 0.5 * dt * rhs_v
+        u_half, v_half, _ = project_channel_velocity(
+            u_half_star, v_half_star, 0.5 * dt, config.dx, config.dy
+        )
+        concentration_half = concentration + 0.5 * dt * scalar_rhs(
+            u,
+            v,
+            concentration,
+            config.scalar_diffusivity,
+            config.dx,
+            config.dy,
+        )
+        rhs_u_half, rhs_v_half = channel_momentum_rhs(
+            u_half, v_half, config.viscosity, config.dx, config.dy
+        )
+        u_star = u + dt * rhs_u_half
+        v_star = v + dt * rhs_v_half
+        concentration_next = concentration + dt * scalar_rhs(
+            u_half,
+            v_half,
+            concentration_half,
+            config.scalar_diffusivity,
+            config.dx,
+            config.dy,
+        )
+        u_next, v_next, pressure = project_channel_velocity(
+            u_star, v_star, dt, config.dx, config.dy
+        )
+        return u_next, v_next, pressure, concentration_next
 
     rhs_u, rhs_v = momentum_rhs(u, v, config.viscosity, config.dx, config.dy)
     u_half_star = u + 0.5 * dt * rhs_u

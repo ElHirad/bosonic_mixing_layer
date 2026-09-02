@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=mixing_layer_32x32_Re_100
+#SBATCH --job-name=mixing_layer_mps
 #SBATCH --output=%x.%j.log
 #SBATCH --clusters=htc
 #SBATCH --partition=htc
@@ -21,9 +21,19 @@ PROJECT_ROOT="${PROJECT_ROOT:-${SLURM_SUBMIT_DIR}}"
 GRID="${GRID:-32}"
 MPS_REYNOLDS="${MPS_REYNOLDS:-100}"
 MPS_PECLET="${MPS_PECLET:-${MPS_REYNOLDS}}"
+MPS_DT="${MPS_DT:-0.0025}"
+MPS_FINAL_TIME="${MPS_FINAL_TIME:-3.5}"
+BOUNDARY_Y="${BOUNDARY_Y:-periodic}"
+SHEAR_CENTER="${SHEAR_CENTER:-0.50}"
 TRANSITION_THICKNESS="${TRANSITION_THICKNESS:-0.06}"
 KH_WIDTH="${KH_WIDTH:-0.10}"
-CASE_TAG="${CASE_TAG:-mps${GRID}_re${MPS_REYNOLDS}_pe${MPS_PECLET}_scalar_delta${TRANSITION_THICKNESS}}"
+KH_MODE="${KH_MODE:-1}"
+KH_AMPLITUDE="${KH_AMPLITUDE:-0.10}"
+SECONDARY_MODE="${SECONDARY_MODE:-2}"
+SECONDARY_AMPLITUDE="${SECONDARY_AMPLITUDE:-0.025}"
+KH_PHASE="${KH_PHASE:-0.6283185307179586}"
+VELOCITY_SCALE="${VELOCITY_SCALE:-4.0}"
+CASE_TAG="${CASE_TAG:-mps${GRID}_re${MPS_REYNOLDS}_pe${MPS_PECLET}_${BOUNDARY_Y}_scalar_delta${TRANSITION_THICKNESS}}"
 RUN_ROOT="${MPS_RUN_DIR:-${SLURM_SUBMIT_DIR}/cluster_runs/${CASE_TAG}}"
 CACHE_ROOT="${MPS_CACHE_ROOT:-${SLURM_SUBMIT_DIR}/cluster_runs/operator_cache}"
 CHECKPOINT="${RUN_ROOT}/mixing_layer_mps_checkpoint.h5"
@@ -31,6 +41,7 @@ RUN_STATUS="${RUN_ROOT}/run_status.txt"
 STOP_FILE="${RUN_ROOT}/STOP_REQUESTED"
 STOP_AFTER_SECONDS="${STOP_AFTER_SECONDS:-518400}"
 SHUTDOWN_RESERVE_SECONDS="${SHUTDOWN_RESERVE_SECONDS:-7200}"
+CHECKPOINT_INTERVAL="${CHECKPOINT_INTERVAL:-25}"
 EXPECTED_JULIA_VERSION="${EXPECTED_JULIA_VERSION:-1.12.6}"
 MPS_MAX_BOSON="${MPS_MAX_BOSON:-4}"
 JULIA_MINOR_VERSION="${EXPECTED_JULIA_VERSION%.*}"
@@ -84,7 +95,8 @@ else
 fi
 
 echo "project=${PROJECT_ROOT}"
-echo "grid=${GRID} reynolds=${MPS_REYNOLDS} peclet=${MPS_PECLET} transition=${TRANSITION_THICKNESS} kh_width=${KH_WIDTH}"
+echo "grid=${GRID} reynolds=${MPS_REYNOLDS} peclet=${MPS_PECLET} boundary_y=${BOUNDARY_Y} transition=${TRANSITION_THICKNESS} kh_width=${KH_WIDTH}"
+echo "kh_mode=${KH_MODE} kh_amplitude=${KH_AMPLITUDE} secondary_mode=${SECONDARY_MODE} secondary_amplitude=${SECONDARY_AMPLITUDE} phase=${KH_PHASE}"
 echo "run=${RUN_ROOT}"
 echo "cache=${CACHE_ROOT}"
 echo "cpus=${SLURM_CPUS_PER_TASK} application_wall_limit=${STOP_AFTER_SECONDS}s"
@@ -107,17 +119,25 @@ srun --ntasks=1 --cpu-bind=cores /usr/bin/time -v \
     --n "${GRID}" \
     --re "${MPS_REYNOLDS}" \
     --pe "${MPS_PECLET}" \
-    --dt 0.0025 \
-    --final-time 3.5 \
+    --dt "${MPS_DT}" \
+    --final-time "${MPS_FINAL_TIME}" \
+    --boundary-y "${BOUNDARY_Y}" \
+    --shear-center "${SHEAR_CENTER}" \
     --transition "${TRANSITION_THICKNESS}" \
     --kh-width "${KH_WIDTH}" \
+    --kh-mode "${KH_MODE}" \
+    --kh-amplitude "${KH_AMPLITUDE}" \
+    --secondary-mode "${SECONDARY_MODE}" \
+    --secondary-amplitude "${SECONDARY_AMPLITUDE}" \
+    --phase "${KH_PHASE}" \
+    --velocity-scale "${VELOCITY_SCALE}" \
     --predictor-chunks 8 \
     --poisson-blocks 12 \
     --output-dir "${RUN_ROOT}" \
     --cache-dir "${CACHE_ROOT}" \
     --require-cache \
     --checkpoint "${CHECKPOINT}" \
-    --checkpoint-interval 25 \
+    --checkpoint-interval "${CHECKPOINT_INTERVAL}" \
     --ceiling-interval 10 \
     --progress-interval 1 \
     --stop-after-seconds "${STOP_AFTER_SECONDS}" \

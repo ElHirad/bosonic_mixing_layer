@@ -1,8 +1,8 @@
 #!/usr/bin/env julia
 
 """
-Bosonic-MPS solver for a periodic 2-D mixing layer using a staggered
-marker-and-cell (MAC) grid and Chorin's projection method.
+Bosonic-MPS solver for periodic and free-slip 2-D mixing layers using a
+staggered marker-and-cell (MAC) grid and Chorin's projection method.
 
 The coherent amplitudes are interleaved cell-by-cell along a serpentine MPS:
 
@@ -37,7 +37,7 @@ using Serialization
 
 const MAX_BOSON = parse(Int, get(ENV, "MPS_MAX_BOSON", "4"))
 const OPERATOR_CACHE_VERSION = 2
-const OPERATOR_DEFINITION_VERSION = 2
+const OPERATOR_DEFINITION_VERSION = 3
 const LEGACY_OPERATOR_SOURCE_DIGESTS = ()
 const CHECKPOINT_VERSION = 3
 const CHECKPOINT_MANIFEST_FORMAT = "mixing-layer-mps-checkpoint-manifest-v1"
@@ -45,6 +45,8 @@ const CHECKPOINT_GENERATIONS_TO_KEEP = 3
 const PRESSURE_GAUGE_TARGET = 1.0e-6
 const PRESSURE_GAUGE_SCALE_FLOOR = 1.0e-10
 const SCALAR_MASS_TOLERANCE = 1.0e-4
+const SCALAR_MASS_PROJECTION_TARGET = 1.0e-10
+const SCALAR_MASS_PROJECTION_TOLERANCE = 1.0e-4
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +93,8 @@ Base.@kwdef struct MPSMACConfig
     peclet::Float64 = 100.0
     dt::Float64 = 0.0025
     final_time::Float64 = 3.5
+    boundary_y::String = "periodic"
+    shear_center_fraction::Float64 = 0.50
     middle_fraction::Float64 = 0.30
     transition_thickness::Float64 = 0.06
     kh_width::Float64 = 0.10
@@ -130,6 +134,10 @@ function validate_config(config::MPSMACConfig)
     config.peclet > 0 || error("Pe must be positive")
     config.dt > 0 || error("dt must be positive")
     config.final_time > 0 || error("final_time must be positive")
+    config.boundary_y in ("periodic", "free-slip") ||
+        error("boundary_y must be 'periodic' or 'free-slip'")
+    0 < config.shear_center_fraction < 1 ||
+        error("shear_center_fraction must lie in (0,1)")
     0 < config.middle_fraction < 1 || error("middle_fraction must lie in (0,1)")
     config.transition_thickness > 0 || error("transition_thickness must be positive")
     config.velocity_scale > 0 || error("velocity_scale must be positive")
@@ -179,7 +187,7 @@ previous_index(i::Integer, n::Integer) = i == 1 ? n : i - 1
 
 
 # ---------------------------------------------------------------------------
-# Periodic MAC operators and initial condition
+# MAC operators and initial condition
 # ---------------------------------------------------------------------------
 
 function mac_divergence(u::AbstractMatrix, v::AbstractMatrix, h::Real)
@@ -296,6 +304,134 @@ function mac_conservative_scalar_advection(
     return result
 end
 
+"""MAC divergence with periodic x and an implicit impermeable top wall.
+
+For the fixed-size MPS layout, row 1 of `v` is the bottom boundary face,
+rows 2:n are interior faces, and the unstored top boundary face is zero.
+"""
+function channel_mac_divergence(u::AbstractMatrix, v::AbstractMatrix, h::Real)
+    n = size(u, 1)
+    size(u) == size(v) == (n, n) || error("channel MPS fields must be n x n")
+    result = zeros(promote_type(eltype(u), eltype(v)), n, n)
+    for j in 1:n, i in 1:n
+        ip = next_index(i, n)
+        v_north = j == n ? zero(eltype(v)) : v[j + 1, i]
+        result[j, i] = (u[j, ip] - u[j, i]) / h + (v_north - v[j, i]) / h
+    end
+    return result
+end
+
+function channel_mac_pressure_gradient(p::AbstractMatrix, h::Real)
+    n = size(p, 1)
+    gx = similar(p)
+    gy = zeros(eltype(p), n, n)
+    for j in 1:n, i in 1:n
+        im = previous_index(i, n)
+        gx[j, i] = (p[j, i] - p[j, im]) / h
+        j > 1 && (gy[j, i] = (p[j, i] - p[j - 1, i]) / h)
+    end
+    return gx, gy
+end
+
+function channel_neumann_laplacian(field::AbstractMatrix, h::Real)
+    n = size(field, 1)
+    result = similar(field)
+    for j in 1:n, i in 1:n
+        ip = next_index(i, n)
+        im = previous_index(i, n)
+        y_term = j == 1 ? field[2, i] - field[1, i] :
+            j == n ? field[n - 1, i] - field[n, i] :
+            field[j + 1, i] - 2field[j, i] + field[j - 1, i]
+        result[j, i] = (
+            field[j, ip] - 2field[j, i] + field[j, im] + y_term
+        ) / h^2
+    end
+    return result
+end
+
+function channel_mac_vorticity(u::AbstractMatrix, v::AbstractMatrix, h::Real)
+    n = size(u, 1)
+    omega = zeros(promote_type(eltype(u), eltype(v)), n, n)
+    for j in 1:n, i in 1:n
+        im = previous_index(i, n)
+        du_dy = j == 1 ? zero(eltype(u)) : (u[j, i] - u[j - 1, i]) / h
+        omega[j, i] = (v[j, i] - v[j, im]) / h - du_dy
+    end
+    return omega
+end
+
+function channel_mac_conservative_advection(
+    u::AbstractMatrix,
+    v::AbstractMatrix,
+    h::Real,
+)
+    n = size(u, 1)
+    advection_u = zeros(promote_type(eltype(u), eltype(v)), n, n)
+    advection_v = similar(advection_u)
+    for j in 1:n, i in 1:n
+        ip = next_index(i, n)
+        im = previous_index(i, n)
+
+        u_e = 0.5 * (u[j, i] + u[j, ip])
+        u_w = 0.5 * (u[j, im] + u[j, i])
+        north_uv = j == n ? zero(eltype(advection_u)) :
+            0.5 * (u[j, i] + u[j + 1, i]) *
+            0.5 * (v[j + 1, im] + v[j + 1, i])
+        south_uv = j == 1 ? zero(eltype(advection_u)) :
+            0.5 * (u[j - 1, i] + u[j, i]) *
+            0.5 * (v[j, im] + v[j, i])
+        advection_u[j, i] = (u_e^2 - u_w^2 + north_uv - south_uv) / h
+
+        j == 1 && continue
+        v_e = 0.5 * (v[j, i] + v[j, ip])
+        v_w = 0.5 * (v[j, im] + v[j, i])
+        u_e_corner = 0.5 * (u[j - 1, ip] + u[j, ip])
+        u_w_corner = 0.5 * (u[j - 1, i] + u[j, i])
+        v_above = j == n ? zero(eltype(v)) : v[j + 1, i]
+        v_n = 0.5 * (v[j, i] + v_above)
+        v_s = 0.5 * (v[j - 1, i] + v[j, i])
+        advection_v[j, i] = (
+            u_e_corner * v_e - u_w_corner * v_w + v_n^2 - v_s^2
+        ) / h
+    end
+    return advection_u, advection_v
+end
+
+function channel_mac_conservative_scalar_advection(
+    u::AbstractMatrix,
+    v::AbstractMatrix,
+    scalar::AbstractMatrix,
+    h::Real,
+)
+    n = size(scalar, 1)
+    result = zeros(promote_type(eltype(u), eltype(v), eltype(scalar)), n, n)
+    for j in 1:n, i in 1:n
+        ip = next_index(i, n)
+        im = previous_index(i, n)
+        east = u[j, ip] * 0.5 * (scalar[j, i] + scalar[j, ip])
+        west = u[j, i] * 0.5 * (scalar[j, im] + scalar[j, i])
+        north = j == n ? zero(eltype(result)) :
+            v[j + 1, i] * 0.5 * (scalar[j, i] + scalar[j + 1, i])
+        south = j == 1 ? zero(eltype(result)) :
+            v[j, i] * 0.5 * (scalar[j - 1, i] + scalar[j, i])
+        result[j, i] = (east - west + north - south) / h
+    end
+    return result
+end
+
+configured_divergence(u, v, h, config::MPSMACConfig) =
+    config.boundary_y == "periodic" ? mac_divergence(u, v, h) :
+    channel_mac_divergence(u, v, h)
+configured_pressure_gradient(p, h, config::MPSMACConfig) =
+    config.boundary_y == "periodic" ? mac_pressure_gradient(p, h) :
+    channel_mac_pressure_gradient(p, h)
+configured_laplacian(field, h, config::MPSMACConfig) =
+    config.boundary_y == "periodic" ? periodic_laplacian(field, h) :
+    channel_neumann_laplacian(field, h)
+configured_vorticity(u, v, h, config::MPSMACConfig) =
+    config.boundary_y == "periodic" ? mac_vorticity(u, v, h) :
+    channel_mac_vorticity(u, v, h)
+
 function base_velocity_profile(y::Real, config::MPSMACConfig)
     y1 = 0.5 * (1 - config.middle_fraction)
     y2 = 0.5 * (1 + config.middle_fraction)
@@ -304,13 +440,17 @@ function base_velocity_profile(y::Real, config::MPSMACConfig)
 end
 
 function base_scalar_profile(y::Real, config::MPSMACConfig)
+    if config.boundary_y == "free-slip"
+        return 0.5 * (1 + tanh((y - config.shear_center_fraction) /
+            config.transition_thickness))
+    end
     y1 = 0.5 * (1 - config.middle_fraction)
     y2 = 0.5 * (1 + config.middle_fraction)
     delta = config.transition_thickness
     return 0.5 * (tanh((y - y1) / delta) - tanh((y - y2) / delta))
 end
 
-"""Sample and normalize the double-tanh scalar to exact 0/1 grid plateaus."""
+"""Sample and normalize the concentration to exact 0/1 grid plateaus."""
 function initial_scalar_profile(config::MPSMACConfig)
     h = grid_spacing(config)
     raw = [base_scalar_profile((j - 0.5) * h, config) for j in 1:config.n]
@@ -321,9 +461,8 @@ end
 
 scalar_reference_mass(config::MPSMACConfig) = mean(initial_scalar_profile(config))
 
-"""Construct a discretely divergence-free MAC double layer plus KH seed."""
-function initial_mac_fields(config::MPSMACConfig)
-    validate_config(config)
+"""Construct a discretely divergence-free periodic double layer plus KH seed."""
+function initial_periodic_mac_fields(config::MPSMACConfig)
     n = config.n
     h = grid_spacing(config)
 
@@ -390,10 +529,65 @@ function initial_mac_fields(config::MPSMACConfig)
     )
 end
 
+"""Construct the DNS-compatible single layer with free-slip channel walls."""
+function initial_channel_mac_fields(config::MPSMACConfig)
+    n = config.n
+    h = grid_spacing(config)
+    y_centers = [(j - 0.5) * h for j in 1:n]
+    target_u = [tanh((y - config.shear_center_fraction) /
+        config.transition_thickness) for y in y_centers]
+
+    base_psi = zeros(Float64, n + 1)
+    for j in 1:n
+        base_psi[j + 1] = base_psi[j] + h * target_u[j]
+    end
+    psi = repeat(reshape(base_psi, n + 1, 1), 1, n)
+    k1 = 2pi * config.kh_mode
+    k2 = 2pi * config.secondary_mode
+    for j in 1:n+1, i in 1:n
+        x = (i - 1) * h
+        y = (j - 1) * h
+        envelope = j in (1, n + 1) ? 0.0 :
+            exp(-((y - config.shear_center_fraction) / config.kh_width)^2)
+        psi[j, i] += envelope * (
+            config.kh_amplitude / k1 * cos(k1 * x) +
+            config.secondary_amplitude / k2 * cos(k2 * x + config.kh_phase)
+        )
+    end
+
+    u = zeros(Float64, n, n)
+    v = zeros(Float64, n, n)
+    for j in 1:n, i in 1:n
+        ip = next_index(i, n)
+        u[j, i] = (psi[j + 1, i] - psi[j, i]) / h
+        v[j, i] = -(psi[j, ip] - psi[j, i]) / h
+    end
+    v[1, :] .= 0.0
+    phi = zeros(Float64, n, n)
+    target_scalar = initial_scalar_profile(config)
+    scalar = repeat(reshape(target_scalar, n, 1), 1, n)
+    return (;
+        u,
+        v,
+        phi,
+        scalar,
+        target_u,
+        target_scalar,
+        mean_u=mean(target_u),
+        seed_streamfunction=psi,
+    )
+end
+
+function initial_mac_fields(config::MPSMACConfig)
+    validate_config(config)
+    return config.boundary_y == "periodic" ? initial_periodic_mac_fields(config) :
+        initial_channel_mac_fields(config)
+end
+
 function validate_initial_fields(config::MPSMACConfig; verbose=true)
     fields = initial_mac_fields(config)
     h = grid_spacing(config)
-    div = mac_divergence(fields.u, fields.v, h)
+    div = configured_divergence(fields.u, fields.v, h, config)
     xmean_u = vec(mean(fields.u; dims=2))
     profile_error = maximum(abs.(xmean_u .- fields.target_u))
     max_divergence = maximum(abs.(div))
@@ -409,8 +603,8 @@ function validate_initial_fields(config::MPSMACConfig; verbose=true)
     profile_error < 1e-12 || error("initial mean velocity profile is inconsistent")
     max_divergence < 1e-12 || error("initial MAC velocity is not divergence-free")
     scalar_profile_error < 1e-12 || error("initial scalar is not x-uniform")
-    minimum(fields.scalar) ≈ 0.0 || error("initial outer scalar plateau is not zero")
-    maximum(fields.scalar) ≈ 1.0 || error("initial middle scalar plateau is not one")
+    minimum(fields.scalar) ≈ 0.0 || error("initial scalar minimum is not zero")
+    maximum(fields.scalar) ≈ 1.0 || error("initial scalar maximum is not one")
     return fields
 end
 
@@ -520,7 +714,7 @@ function add_quadratic_terms!(
     return ops
 end
 
-function build_predictor_mpo(sites, config::MPSMACConfig)
+function build_periodic_predictor_mpo(sites, config::MPSMACConfig)
     n = config.n
     h = grid_spacing(config)
     nu = viscosity(config)
@@ -639,7 +833,7 @@ function build_predictor_mpo(sites, config::MPSMACConfig)
     return [MPO(component, sites) for component in components]
 end
 
-function build_pressure_relaxation_mpo(sites, config::MPSMACConfig)
+function build_periodic_pressure_relaxation_mpo(sites, config::MPSMACConfig)
     n = config.n
     h = grid_spacing(config)
     source_scale = config.velocity_scale / (config.pressure_impulse_scale * h)
@@ -671,7 +865,7 @@ function build_pressure_relaxation_mpo(sites, config::MPSMACConfig)
     return MPO(ops, sites)
 end
 
-function build_pressure_correction_mpo(sites, config::MPSMACConfig)
+function build_periodic_pressure_correction_mpo(sites, config::MPSMACConfig)
     n = config.n
     h = grid_spacing(config)
     coefficient = config.pressure_impulse_scale / (config.velocity_scale * h)
@@ -693,6 +887,241 @@ function build_pressure_correction_mpo(sites, config::MPSMACConfig)
     end
     return MPO(ops, sites)
 end
+
+"""Build the predictor for periodic x and free-slip/no-flux y walls."""
+function build_channel_predictor_mpo(sites, config::MPSMACConfig)
+    n = config.n
+    h = grid_spacing(config)
+    nu = viscosity(config)
+    kappa = scalar_diffusivity(config)
+    scale = config.velocity_scale
+    chunks = min(config.predictor_chunks, n)
+    ops_uu_x = [OpSum() for _ in 1:chunks]
+    ops_uv_y = [OpSum() for _ in 1:chunks]
+    ops_uv_x = [OpSum() for _ in 1:chunks]
+    ops_vv_y = [OpSum() for _ in 1:chunks]
+    ops_diffusion = [OpSum() for _ in 1:chunks]
+    ops_scalar_x = [OpSum() for _ in 1:chunks]
+    ops_scalar_y = [OpSum() for _ in 1:chunks]
+    ops_scalar_diffusion = [OpSum() for _ in 1:chunks]
+
+    for j in 1:n, i in 1:n
+        chunk = min(cld(j * chunks, n), chunks)
+        ip = next_index(i, n)
+        im = previous_index(i, n)
+        k = cell_from_grid(j, i, n)
+        kip = cell_from_grid(j, ip, n)
+        kim = cell_from_grid(j, im, n)
+        ut = usite(k)
+        vt = vsite(k)
+        ct = csite(k)
+
+        u_e = ((0.5, usite(k)), (0.5, usite(kip)))
+        u_w = ((0.5, usite(kim)), (0.5, usite(k)))
+        add_quadratic_terms!(ops_uu_x[chunk], -scale / h, ut, u_e, u_e)
+        add_quadratic_terms!(ops_uu_x[chunk], +scale / h, ut, u_w, u_w)
+        if j < n
+            kjp = cell_from_grid(j + 1, i, n)
+            kjpim = cell_from_grid(j + 1, im, n)
+            u_n = ((0.5, usite(k)), (0.5, usite(kjp)))
+            v_n_corner = ((0.5, vsite(kjpim)), (0.5, vsite(kjp)))
+            add_quadratic_terms!(
+                ops_uv_y[chunk], -scale / h, ut, u_n, v_n_corner,
+            )
+        end
+        if j > 1
+            kjm = cell_from_grid(j - 1, i, n)
+            u_s = ((0.5, usite(kjm)), (0.5, usite(k)))
+            v_s_corner = ((0.5, vsite(kim)), (0.5, vsite(k)))
+            add_quadratic_terms!(
+                ops_uv_y[chunk], +scale / h, ut, u_s, v_s_corner,
+            )
+        end
+
+        # Row 1 is the prescribed bottom-wall v face. It has no target terms.
+        if j > 1
+            kjm = cell_from_grid(j - 1, i, n)
+            kjmip = cell_from_grid(j - 1, ip, n)
+            v_e = ((0.5, vsite(k)), (0.5, vsite(kip)))
+            v_w = ((0.5, vsite(kim)), (0.5, vsite(k)))
+            u_e_corner = ((0.5, usite(kjmip)), (0.5, usite(kip)))
+            u_w_corner = ((0.5, usite(kjm)), (0.5, usite(k)))
+            add_quadratic_terms!(
+                ops_uv_x[chunk], -scale / h, vt, u_e_corner, v_e,
+            )
+            add_quadratic_terms!(
+                ops_uv_x[chunk], +scale / h, vt, u_w_corner, v_w,
+            )
+            v_s = ((0.5, vsite(kjm)), (0.5, vsite(k)))
+            add_quadratic_terms!(ops_vv_y[chunk], +scale / h, vt, v_s, v_s)
+            if j < n
+                kjp = cell_from_grid(j + 1, i, n)
+                v_n = ((0.5, vsite(k)), (0.5, vsite(kjp)))
+                add_quadratic_terms!(
+                    ops_vv_y[chunk], -scale / h, vt, v_n, v_n,
+                )
+            else
+                # The top-wall value is zero, so (v + 0)^2/4 remains.
+                add_quadratic_terms!(
+                    ops_vv_y[chunk], -scale / h, vt,
+                    ((0.5, vsite(k)),), ((0.5, vsite(k)),),
+                )
+            end
+        end
+
+        # Free-slip u diffusion: Neumann at the two y walls.
+        for neighbor in (kip, kim)
+            add!(ops_diffusion[chunk], nu / h^2, "adag", ut, "a", usite(neighbor))
+        end
+        if j > 1
+            kjm = cell_from_grid(j - 1, i, n)
+            add!(ops_diffusion[chunk], nu / h^2, "adag", ut, "a", usite(kjm))
+        end
+        if j < n
+            kjp = cell_from_grid(j + 1, i, n)
+            add!(ops_diffusion[chunk], nu / h^2, "adag", ut, "a", usite(kjp))
+        end
+        u_diagonal = j in (1, n) ? -3nu / h^2 : -4nu / h^2
+        add!(ops_diffusion[chunk], u_diagonal, "Num", ut)
+
+        # Interior v diffusion has homogeneous Dirichlet values at both walls.
+        if j > 1
+            for neighbor in (kip, kim)
+                add!(
+                    ops_diffusion[chunk], nu / h^2,
+                    "adag", vt, "a", vsite(neighbor),
+                )
+            end
+            kjm = cell_from_grid(j - 1, i, n)
+            add!(ops_diffusion[chunk], nu / h^2, "adag", vt, "a", vsite(kjm))
+            if j < n
+                kjp = cell_from_grid(j + 1, i, n)
+                add!(ops_diffusion[chunk], nu / h^2, "adag", vt, "a", vsite(kjp))
+            end
+            add!(ops_diffusion[chunk], -4nu / h^2, "Num", vt)
+        end
+
+        c_e = ((0.5, csite(k)), (0.5, csite(kip)))
+        c_w = ((0.5, csite(kim)), (0.5, csite(k)))
+        add_quadratic_terms!(
+            ops_scalar_x[chunk], -scale / h, ct, ((1.0, usite(kip)),), c_e,
+        )
+        add_quadratic_terms!(
+            ops_scalar_x[chunk], +scale / h, ct, ((1.0, usite(k)),), c_w,
+        )
+        if j < n
+            kjp = cell_from_grid(j + 1, i, n)
+            c_n = ((0.5, csite(k)), (0.5, csite(kjp)))
+            add_quadratic_terms!(
+                ops_scalar_y[chunk], -scale / h, ct,
+                ((1.0, vsite(kjp)),), c_n,
+            )
+        end
+        if j > 1
+            kjm = cell_from_grid(j - 1, i, n)
+            c_s = ((0.5, csite(kjm)), (0.5, csite(k)))
+            add_quadratic_terms!(
+                ops_scalar_y[chunk], +scale / h, ct,
+                ((1.0, vsite(k)),), c_s,
+            )
+        end
+        for neighbor in (kip, kim)
+            add!(
+                ops_scalar_diffusion[chunk], kappa / h^2,
+                "adag", ct, "a", csite(neighbor),
+            )
+        end
+        if j > 1
+            kjm = cell_from_grid(j - 1, i, n)
+            add!(
+                ops_scalar_diffusion[chunk], kappa / h^2,
+                "adag", ct, "a", csite(kjm),
+            )
+        end
+        if j < n
+            kjp = cell_from_grid(j + 1, i, n)
+            add!(
+                ops_scalar_diffusion[chunk], kappa / h^2,
+                "adag", ct, "a", csite(kjp),
+            )
+        end
+        c_diagonal = j in (1, n) ? -3kappa / h^2 : -4kappa / h^2
+        add!(ops_scalar_diffusion[chunk], c_diagonal, "Num", ct)
+    end
+    components = vcat(
+        ops_uu_x, ops_uv_y, ops_uv_x, ops_vv_y, ops_diffusion,
+        ops_scalar_x, ops_scalar_y, ops_scalar_diffusion,
+    )
+    return [MPO(component, sites) for component in components]
+end
+
+function build_channel_pressure_relaxation_mpo(sites, config::MPSMACConfig)
+    n = config.n
+    h = grid_spacing(config)
+    source_scale = config.velocity_scale / (config.pressure_impulse_scale * h)
+    ops = OpSum()
+    for j in 1:n, i in 1:n
+        ip = next_index(i, n)
+        im = previous_index(i, n)
+        k = cell_from_grid(j, i, n)
+        kip = cell_from_grid(j, ip, n)
+        kim = cell_from_grid(j, im, n)
+        pt = psite(k)
+        for neighbor in (kip, kim)
+            add!(ops, 1 / h^2, "adag", pt, "a", psite(neighbor))
+        end
+        if j > 1
+            kjm = cell_from_grid(j - 1, i, n)
+            add!(ops, 1 / h^2, "adag", pt, "a", psite(kjm))
+        end
+        if j < n
+            kjp = cell_from_grid(j + 1, i, n)
+            add!(ops, 1 / h^2, "adag", pt, "a", psite(kjp))
+        end
+        diagonal = j in (1, n) ? -3 / h^2 : -4 / h^2
+        add!(ops, diagonal, "Num", pt)
+        add!(ops, -source_scale, "adag", pt, "a", usite(kip))
+        add!(ops, +source_scale, "adag", pt, "a", usite(k))
+        if j < n
+            kjp = cell_from_grid(j + 1, i, n)
+            add!(ops, -source_scale, "adag", pt, "a", vsite(kjp))
+        end
+        add!(ops, +source_scale, "adag", pt, "a", vsite(k))
+    end
+    return MPO(ops, sites)
+end
+
+function build_channel_pressure_correction_mpo(sites, config::MPSMACConfig)
+    n = config.n
+    h = grid_spacing(config)
+    coefficient = config.pressure_impulse_scale / (config.velocity_scale * h)
+    ops = OpSum()
+    for j in 1:n, i in 1:n
+        im = previous_index(i, n)
+        k = cell_from_grid(j, i, n)
+        kim = cell_from_grid(j, im, n)
+        add!(ops, -coefficient, "adag", usite(k), "a", psite(k))
+        add!(ops, +coefficient, "adag", usite(k), "a", psite(kim))
+        if j > 1
+            kjm = cell_from_grid(j - 1, i, n)
+            add!(ops, -coefficient, "adag", vsite(k), "a", psite(k))
+            add!(ops, +coefficient, "adag", vsite(k), "a", psite(kjm))
+        end
+    end
+    return MPO(ops, sites)
+end
+
+build_predictor_mpo(sites, config::MPSMACConfig) =
+    config.boundary_y == "periodic" ? build_periodic_predictor_mpo(sites, config) :
+    build_channel_predictor_mpo(sites, config)
+build_pressure_relaxation_mpo(sites, config::MPSMACConfig) =
+    config.boundary_y == "periodic" ?
+    build_periodic_pressure_relaxation_mpo(sites, config) :
+    build_channel_pressure_relaxation_mpo(sites, config)
+build_pressure_correction_mpo(sites, config::MPSMACConfig) =
+    config.boundary_y == "periodic" ?
+    build_periodic_pressure_correction_mpo(sites, config) :
+    build_channel_pressure_correction_mpo(sites, config)
 
 
 # ---------------------------------------------------------------------------
@@ -725,6 +1154,7 @@ function operator_fingerprint(config::MPSMACConfig)
         (:schema, OPERATOR_CACHE_VERSION),
         (:operator_definition, OPERATOR_DEFINITION_VERSION),
         (:layout, "interleaved-u-v-phi-scalar-serpentine-v2"),
+        (:boundary_y, config.boundary_y),
         (:n, config.n),
         (:reynolds, config.reynolds),
         (:peclet, config.peclet),
@@ -744,6 +1174,7 @@ function legacy_operator_fingerprint(config::MPSMACConfig, source::AbstractStrin
     return stable_fingerprint((
         (:schema, OPERATOR_CACHE_VERSION),
         (:layout, "interleaved-u-v-phi-scalar-serpentine-v2"),
+        (:boundary_y, config.boundary_y),
         (:n, config.n),
         (:reynolds, config.reynolds),
         (:peclet, config.peclet),
@@ -1253,8 +1684,8 @@ end
 
 function pressure_poisson_residual(fields, config::MPSMACConfig)
     h = grid_spacing(config)
-    rhs = mac_divergence(fields.u, fields.v, h)
-    laplacian_phi = periodic_laplacian(fields.phi, h)
+    rhs = configured_divergence(fields.u, fields.v, h, config)
+    laplacian_phi = configured_laplacian(fields.phi, h, config)
     residual = laplacian_phi - rhs
     denominator = max(norm(rhs), norm(laplacian_phi), eps(Float64))
     return norm(residual) / denominator
@@ -1270,7 +1701,7 @@ function pressure_gauge_ratio(fields, config::MPSMACConfig)
 end
 
 """
-Remove the arbitrary constant mode of periodic pressure from the MPS itself.
+Remove the arbitrary constant mode of periodic/Neumann pressure from the MPS.
 
 A uniform local displacement shifts every pressure coherent amplitude without
 changing velocity observables, pressure gradients, or MPS bond dimensions.
@@ -1302,6 +1733,46 @@ function enforce_pressure_gauge(
         centered_fields = field_expectations(centered, config; include_ceiling)
     end
     return centered, centered_fields
+end
+
+"""
+Restore the conserved concentration mean with the minimum uniform correction.
+
+The conservative scalar MPO preserves this invariant in the untruncated
+coherent-state algebra. A finite local boson basis and one-site TDVP introduce
+a small drift, so project only that constant mode after the predictor. The
+pre-projection error remains a strict diagnostic to prevent this correction
+from hiding a poorly resolved evolution.
+"""
+function enforce_scalar_mass(
+    state,
+    fields,
+    config::MPSMACConfig;
+    include_ceiling::Bool=false,
+    use_gpu::Bool=false,
+)
+    corrected = state
+    corrected_fields = fields
+    reference = scalar_reference_mass(config)
+    scale = max(abs(reference), eps(Float64))
+    for _ in 1:3
+        relative_error = abs(mean(corrected_fields.scalar) - reference) / scale
+        relative_error <= SCALAR_MASS_PROJECTION_TARGET && break
+        displacement = (reference - mean(corrected_fields.scalar)) /
+            config.scalar_scale
+        sites = siteinds(corrected)
+        gates = [
+            exp(
+                displacement * op("adag", sites[csite(k)]) -
+                conj(displacement) * op("a", sites[csite(k)])
+            ) for k in 1:number_of_cells(config)
+        ]
+        use_gpu && (gates = [CUDA.cu(gate) for gate in gates])
+        corrected = apply(gates, corrected)
+        normalize!(corrected)
+        corrected_fields = field_expectations(corrected, config; include_ceiling)
+    end
+    return corrected, corrected_fields
 end
 
 function relax_pressure(state, tentative_fields, pressure_mpo, config::MPSMACConfig)
@@ -1357,6 +1828,15 @@ function chorin_step(
             nsite=config.predictor_nsite,
         )
         tentative_fields = field_expectations(tentative, config)
+        scalar_mass_projection = abs(
+            mean(tentative_fields.scalar) - scalar_reference_mass(config),
+        ) / max(abs(scalar_reference_mass(config)), eps(Float64))
+        tentative, tentative_fields = enforce_scalar_mass(
+            tentative,
+            tentative_fields,
+            config;
+            use_gpu,
+        )
     end
     pressure_seconds = @elapsed begin
         relaxed, relaxed_fields, pressure_residual, blocks =
@@ -1394,7 +1874,7 @@ function chorin_step(
         )
     end
     h = grid_spacing(config)
-    grad_x, grad_y = mac_pressure_gradient(relaxed_fields.phi, h)
+    grad_x, grad_y = configured_pressure_gradient(relaxed_fields.phi, h, config)
     correction_norm = sqrt(norm(grad_x)^2 + norm(grad_y)^2)
     correction_defect = sqrt(
         norm(corrected_fields.u - relaxed_fields.u + grad_x)^2 +
@@ -1408,6 +1888,7 @@ function chorin_step(
     )
     defects = (;
         pressure_residual,
+        scalar_mass_projection,
         velocity_leakage,
         pressure_scalar_leakage,
         correction_defect,
@@ -1420,7 +1901,7 @@ end
 
 function step_quality(state, fields, config::MPSMACConfig)
     h = grid_spacing(config)
-    div = mac_divergence(fields.u, fields.v, h)
+    div = configured_divergence(fields.u, fields.v, h, config)
     return (
         max_divergence=maximum(abs.(div)),
         relative_divergence=norm(div) /
@@ -1451,6 +1932,7 @@ function check_step_quality(
         quality.pressure_gauge,
         quality.max_imaginary,
         defects.pressure_residual,
+        defects.scalar_mass_projection,
         defects.velocity_leakage,
         defects.pressure_scalar_leakage,
         defects.correction_defect,
@@ -1467,6 +1949,8 @@ function check_step_quality(
 
     defects.pressure_residual > config.poisson_tolerance &&
         @warn "pressure relaxation did not reach tolerance" step pressure_residual=defects.pressure_residual blocks
+    defects.scalar_mass_projection > SCALAR_MASS_PROJECTION_TOLERANCE &&
+        @warn "concentration mean requires an excessive projection" step value=defects.scalar_mass_projection
     quality.relative_divergence > 1e-4 &&
         @warn "post-projection divergence gate failed" step value=quality.relative_divergence
     defects.velocity_leakage > 1e-5 &&
@@ -1493,6 +1977,8 @@ function check_step_quality(
     failures = String[]
     defects.pressure_residual > config.poisson_tolerance &&
         push!(failures, "pressure residual")
+    defects.scalar_mass_projection > SCALAR_MASS_PROJECTION_TOLERANCE &&
+        push!(failures, "scalar mass projection")
     quality.relative_divergence > 1e-4 && push!(failures, "relative divergence")
     defects.velocity_leakage > 1e-5 && push!(failures, "pressure velocity leakage")
     defects.pressure_scalar_leakage > 1e-5 &&
@@ -1521,7 +2007,7 @@ function snapshot_diagnostics(
     config::MPSMACConfig;
     quality=step_quality(state, fields, config),
 )
-    omega = mac_vorticity(fields.u, fields.v, grid_spacing(config))
+    omega = configured_vorticity(fields.u, fields.v, grid_spacing(config), config)
     return (
         kinetic_energy=0.5 * mean(fields.u .^ 2 .+ fields.v .^ 2),
         cross_stream_energy=0.5 * mean(fields.v .^ 2),
@@ -1538,6 +2024,7 @@ function snapshot_diagnostics(
         scalar_variance=mean((fields.scalar .- quality.scalar_mass) .^ 2),
         pressure_gauge=quality.pressure_gauge,
         pressure_residual=defects.pressure_residual,
+        scalar_mass_projection=defects.scalar_mass_projection,
         pressure_velocity_leakage=defects.velocity_leakage,
         pressure_scalar_leakage=defects.pressure_scalar_leakage,
         correction_defect=defects.correction_defect,
@@ -1781,7 +2268,7 @@ function run_simulation(
     checkpoint_state = isnothing(checkpoint) ? nothing : checkpoint.state
     sites_override = isnothing(checkpoint_state) ? nothing : siteinds(checkpoint_state)
 
-    @info "Loading/building periodic Chorin/MAC/scalar operators" sites=4number_of_cells(config)
+    @info "Loading/building Chorin/MAC/scalar operators" boundary_y=config.boundary_y sites=4number_of_cells(config)
     operator_measurement = @timed load_or_build_operators(
         config;
         cache_directory=operator_cache_directory,
@@ -1815,6 +2302,7 @@ function run_simulation(
         step_diagnostics_history = Any[]
         defects = (
             pressure_residual=NaN,
+            scalar_mass_projection=0.0,
             velocity_leakage=0.0,
             pressure_scalar_leakage=0.0,
             correction_defect=0.0,
@@ -1875,7 +2363,10 @@ function run_simulation(
         push!(snapshot_step_history, step)
         push!(times, step * config.dt)
         push!(fields_history, fields)
-        push!(omega_history, mac_vorticity(fields.u, fields.v, grid_spacing(config)))
+        push!(
+            omega_history,
+            configured_vorticity(fields.u, fields.v, grid_spacing(config), config),
+        )
         push!(diagnostics_history, diagnostic)
         @printf(
             "snapshot %d/8 step=%d t=%6.3f E=%.6e mean(c)=%.6e dc=%.3e max|div|=%.3e Poisson=%.3e chi=%d ceiling=%.3e\n",
@@ -1959,6 +2450,7 @@ function run_simulation(
             poisson_blocks=blocks,
             pressure_sweeps=blocks * config.poisson_steps_per_block,
             pressure_residual=defects.pressure_residual,
+            scalar_mass_projection=defects.scalar_mass_projection,
             max_divergence=quality.max_divergence,
             relative_divergence=quality.relative_divergence,
             pressure_velocity_leakage=defects.velocity_leakage,
@@ -2123,6 +2615,8 @@ function smoke_config(; output_dir="outputs/mps_mac_smoke", steps::Int=1)
         peclet=production.peclet,
         dt=production.dt,
         final_time=steps * production.dt,
+        boundary_y=production.boundary_y,
+        shear_center_fraction=production.shear_center_fraction,
         middle_fraction=production.middle_fraction,
         transition_thickness=production.transition_thickness,
         kh_width=production.kh_width,
@@ -2192,7 +2686,8 @@ end
 
 const CLI_VALUE_FLAGS = Set([
     "--steps", "--n", "--re", "--pe", "--dt", "--final-time", "--middle-fraction",
-    "--transition", "--kh-width", "--kh-mode", "--kh-amplitude",
+    "--boundary-y", "--shear-center", "--transition", "--kh-width",
+    "--kh-mode", "--kh-amplitude", "--phase",
     "--secondary-mode", "--secondary-amplitude", "--maxdim", "--cutoff",
     "--poisson-tol", "--poisson-blocks", "--poisson-steps",
     "--predictor-nsite", "--pressure-nsite", "--correction-nsite",
@@ -2201,6 +2696,7 @@ const CLI_VALUE_FLAGS = Set([
     "--checkpoint-interval", "--ceiling-interval", "--progress-interval",
     "--stop-after-seconds", "--shutdown-reserve-seconds", "--stop-file",
     "--run-status", "--blas-threads", "--strided-threads", "--scalar-scale",
+    "--velocity-scale",
 ])
 
 const CLI_SWITCH_FLAGS = Set([
@@ -2244,6 +2740,8 @@ function print_help()
       --pe VALUE          override scalar Pe (default: same value as Re)
       --dt VALUE          override physical dt (default 0.0025)
       --final-time VALUE  override final time (default 3.5)
+      --boundary-y TYPE   y boundary: periodic or free-slip (default periodic)
+      --shear-center F    single-layer center for free-slip y (default 0.50)
       --middle-fraction F override middle-layer width fraction (default 0.30)
       --transition D      override tanh transition parameter (default 0.06)
       --kh-width VALUE    override KH envelope width (default 0.10)
@@ -2252,6 +2750,8 @@ function print_help()
       --secondary-mode N  override secondary KH mode (default 2)
       --secondary-amplitude A
                           override secondary KH amplitude (default 0.025)
+      --phase VALUE       secondary-mode phase in radians (default pi/5)
+      --velocity-scale S  coherent-amplitude scale for velocity (default 4)
       --scalar-scale S    coherent-amplitude scale for scalar (default 4)
       --maxdim N          override maximum MPS bond dimension (default 64)
       --cutoff VALUE      override TDVP truncation cutoff (default 1e-10)
@@ -2308,6 +2808,8 @@ function main(args=ARGS)
         peclet=argument_value(args, "--pe", reynolds),
         dt=argument_value(args, "--dt", 0.0025),
         final_time=argument_value(args, "--final-time", 3.5),
+        boundary_y=something(optional_argument(args, "--boundary-y"), "periodic"),
+        shear_center_fraction=argument_value(args, "--shear-center", 0.50),
         middle_fraction=argument_value(args, "--middle-fraction", 0.30),
         transition_thickness=argument_value(args, "--transition", 0.06),
         kh_width=argument_value(args, "--kh-width", 0.10),
@@ -2315,6 +2817,8 @@ function main(args=ARGS)
         kh_amplitude=argument_value(args, "--kh-amplitude", 0.10),
         secondary_mode=argument_value(args, "--secondary-mode", 2),
         secondary_amplitude=argument_value(args, "--secondary-amplitude", 0.025),
+        kh_phase=argument_value(args, "--phase", pi / 5),
+        velocity_scale=argument_value(args, "--velocity-scale", 4.0),
         scalar_scale=argument_value(args, "--scalar-scale", 4.0),
         maxdim=argument_value(args, "--maxdim", 64),
         cutoff=argument_value(args, "--cutoff", 1.0e-10),

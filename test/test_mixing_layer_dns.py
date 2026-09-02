@@ -286,6 +286,50 @@ class SingleLayerChannelTests(unittest.TestCase):
             self.assertLess(snapshot.diagnostics["max_divergence"], 2e-11)
             np.testing.assert_array_equal(snapshot.v[[0, -1], :], 0.0)
 
+    def test_channel_scalar_step_is_compatible_and_conservative(self) -> None:
+        config = SimulationConfig(
+            nx=16,
+            ny=16,
+            dx=1.0 / 16.0,
+            dy=1.0 / 16.0,
+            reynolds=50.0,
+            peclet=50.0,
+            transition_thickness=0.04,
+            perturbation_width=0.12,
+            perturbation_mode=2,
+            perturbation_amplitude=2.5,
+            subharmonic_mode=1,
+            subharmonic_amplitude=0.5,
+            perturbation_phase=0.0,
+            max_dt=0.0025,
+            t_end=0.65,
+        )
+        u, v, _ = initialize_velocity(config)
+        concentration = initialize_concentration(config)
+        self.assertAlmostEqual(float(np.min(concentration)), 0.0, places=14)
+        self.assertAlmostEqual(float(np.max(concentration)), 1.0, places=14)
+        rhs = scalar_rhs(
+            u,
+            v,
+            concentration,
+            config.scalar_diffusivity,
+            config.dx,
+            config.dy,
+        )
+        self.assertLess(abs(float(np.sum(rhs))), 2e-12)
+        expected_u, expected_v, expected_pressure = advance_one_step(
+            u, v, 0.0005, config
+        )
+        actual_u, actual_v, actual_pressure, actual_c = advance_one_step_with_scalar(
+            u, v, concentration, 0.0005, config
+        )
+        np.testing.assert_allclose(actual_u, expected_u, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(actual_v, expected_v, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(actual_pressure, expected_pressure, rtol=0.0, atol=0.0)
+        self.assertAlmostEqual(
+            float(np.mean(actual_c)), float(np.mean(concentration)), places=14
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,6 +15,7 @@ include("test_mixing_layer_mps_mac.jl")
         @test final.correction_defect < 1e-3
         @test final.correction_pressure_leakage < 1e-5
         @test final.correction_scalar_leakage < 1e-5
+        @test final.scalar_mass_projection < SCALAR_MASS_PROJECTION_TOLERANCE
         @test final.scalar_mass_error < SCALAR_MASS_TOLERANCE
         @test final.pressure_gauge < 1e-4
         @test final.ceiling_probability < 1e-4

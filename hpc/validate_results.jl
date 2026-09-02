@@ -44,6 +44,7 @@ end
 
 gate("relative_divergence", 1.0e-4)
 gate("pressure_residual", parameters["poisson_tolerance"]; skip_initial=true)
+gate("scalar_mass_projection", 1.0e-4; skip_initial=true)
 gate("pressure_velocity_leakage", 1.0e-5)
 gate("pressure_scalar_leakage", 1.0e-5)
 gate("correction_defect", 1.0e-3)
@@ -71,6 +72,7 @@ function step_gate(name, limit)
 end
 
 step_gate("pressure_residual", parameters["poisson_tolerance"])
+step_gate("scalar_mass_projection", 1.0e-4)
 step_gate("relative_divergence", 1.0e-4)
 step_gate("pressure_velocity_leakage", 1.0e-5)
 step_gate("pressure_scalar_leakage", 1.0e-5)

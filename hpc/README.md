@@ -48,8 +48,13 @@ cache and checkpoint fingerprint.
 
 Pressure relaxation stops as soon as its residual reaches tolerance, with a
 default safety cap of 12 blocks. After relaxation and correction, uniform
-one-site displacement gates remove the arbitrary periodic pressure constant
-from the MPS without changing velocity observables or pressure gradients.
+one-site displacement gates remove the arbitrary periodic/Neumann pressure
+constant from the MPS without changing velocity observables or pressure
+gradients.
+
+The scalar predictor similarly removes only its small uniform mass-error mode.
+The pre-projection correction is recorded and strictly limited to `1e-4`, so
+the exact conserved mean does not mask loss of scalar resolution.
 
 The code exposes two non-nested threading modes. The supplied scripts start
 with Julia/Strided threading and one BLAS thread. Also benchmark the converse
@@ -70,6 +75,20 @@ export MPS_RUN_DIR=/cluster/scratch/$USER/mixing-layer/mps32-re100
 export MPS_CACHE_ROOT=/cluster/scratch/$USER/mixing-layer/operator-cache
 export MPS_REYNOLDS=100
 export MPS_PECLET=100
+sbatch hpc/mps_cpu_chunk.sbatch
+```
+
+The batch template also accepts `MPS_DT`, `MPS_FINAL_TIME`, `BOUNDARY_Y`,
+`SHEAR_CENTER`, `TRANSITION_THICKNESS`, `KH_WIDTH`, `KH_MODE`, `KH_AMPLITUDE`,
+`SECONDARY_MODE`, `SECONDARY_AMPLITUDE`, `KH_PHASE`, `VELOCITY_SCALE`, and
+`CHECKPOINT_INTERVAL`. For the 16x16 free-slip pairing/concentration case,
+use:
+
+```bash
+export GRID=16 MPS_REYNOLDS=50 MPS_PECLET=50 MPS_FINAL_TIME=0.65
+export BOUNDARY_Y=free-slip TRANSITION_THICKNESS=0.04 KH_WIDTH=0.12
+export KH_MODE=2 KH_AMPLITUDE=2.5 SECONDARY_MODE=1 SECONDARY_AMPLITUDE=0.5
+export KH_PHASE=0 VELOCITY_SCALE=8
 sbatch hpc/mps_cpu_chunk.sbatch
 ```
 

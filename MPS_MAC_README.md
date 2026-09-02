@@ -1,8 +1,9 @@
 # Bosonic-MPS Chorin/MAC mixing layer
 
-[`mixing_layer_mps_mac.jl`](./mixing_layer_mps_mac.jl) implements the periodic
-mixing layer with the coherent bosonic-MPS procedure used by `ldc.jl`, but with
-a staggered marker-and-cell grid and Chorin pressure projection.
+[`mixing_layer_mps_mac.jl`](./mixing_layer_mps_mac.jl) implements periodic and
+free-slip mixing layers with the coherent bosonic-MPS procedure used by
+`ldc.jl`, but with a staggered marker-and-cell grid and Chorin pressure
+projection.
 
 ## Formulation
 
@@ -16,8 +17,10 @@ c[j,i]   : ((i-1/2) dx, (j-1/2) dy)  conserved passive scalar
 ```
 
 The default `32x32` grid therefore has 4096 bosonic sites. The stored coherent
-amplitudes use `u=4<a_u>`, `v=4<a_v>`, `phi=4<a_phi>`, and `c=4<a_c>`, keeping
-the velocity and scalar plateaus near amplitude 0.25.
+amplitudes normally use `u=4<a_u>`, `v=4<a_v>`, `phi=4<a_phi>`, and
+`c=4<a_c>`. `--velocity-scale` changes only this encoding, not the physical
+field; the finite-amplitude 16x16 channel uses 8 to stay below the local boson
+ceiling.
 
 One Chorin step consists of:
 
@@ -25,8 +28,8 @@ One Chorin step consists of:
    viscosity, and conservative scalar advection-diffusion;
 2. adaptive one-site TDVP relaxation of
    `laplacian(phi)=divergence(u_star)` (up to 12 blocks by default), followed
-   by a uniform local displacement that enforces the zero-mean periodic
-   pressure gauge in the MPS itself;
+   by a uniform local displacement that enforces the zero-mean periodic or
+   Neumann pressure gauge in the MPS itself;
 3. a one-site TDVP correction `u=u_star-gradient(phi)`.
 
 The coherent-product manifold is invariant under the ideal bosonic generator,
@@ -35,8 +38,12 @@ unnecessary two-site SVDs. Finite boson truncation can break that ideal
 property. For quantitative work, compare against `--predictor-nsite 2`; this
 allows predictor bonds to grow and is the more conservative convergence check.
 
-All neighbors wrap periodically. The KH perturbation is a discrete curl of a
-corner streamfunction and is divergence-free before projection.
+The default double layer wraps in both directions. With
+`--boundary-y free-slip`, only x wraps: `du/dy=0`, `v=0`, and `dphi/dy=0` are
+imposed at the y walls. To retain exactly four sites per cell, the channel MPS
+stores the bottom and `n-1` interior v faces; the top zero-valued face is implicit. The KH
+perturbation is a discrete curl of a corner streamfunction and is divergence
+free before projection.
 
 The passive scalar obeys
 
@@ -44,11 +51,29 @@ The passive scalar obeys
 dc/dt + div(u c) = (1/Pe) laplacian(c).
 ```
 
-It starts from a double-tanh profile, normalized on the sampled grid to be 1
-in the middle stream and 0 in the two outer streams. Centered scalar values
-are averaged to the MAC faces before forming conservative `u*c` and `v*c`
-fluxes. Their periodic sum is exactly zero at the discrete equation level.
-The default `Pe=Re`; use `--pe` to choose it independently.
+The periodic case starts from a normalized double-tanh profile. The channel
+starts from a normalized single tanh, from 0 below the shear to 1 above it.
+Centered scalar values are averaged to the MAC faces before forming
+conservative `u*c` and `v*c` fluxes. The channel has zero advective wall flux
+and Neumann diffusion, so total concentration is conserved by the discrete
+equations. The default `Pe=Re`; use `--pe` to choose it independently.
+
+Finite local-boson truncation and one-site TDVP can introduce a small drift in
+the constant scalar mode even though the discrete flux sum is zero. After each
+predictor, a uniform scalar displacement restores the reference mean with the
+minimum L2 correction. The uncorrected per-step drift is retained as
+`scalar_mass_projection` and independently hard-gated at `1e-4`; the
+projection therefore cannot hide an under-resolved scalar evolution.
+
+The roll-up/pairing channel configuration is:
+
+```bash
+julia --project=. mixing_layer_mps_mac.jl --n 16 --re 50 --pe 50 \
+  --boundary-y free-slip --transition 0.04 --kh-width 0.12 \
+  --kh-mode 2 --kh-amplitude 2.5 \
+  --secondary-mode 1 --secondary-amplitude 0.5 --phase 0 \
+  --velocity-scale 8 --final-time 0.65 --strict-quality --no-plot
+```
 
 ## Default visible-mixing case
 
@@ -113,7 +138,8 @@ JULIA_PKG_OFFLINE=true julia +1.12.6 --project=. --startup-file=no mixing_layer_
 JULIA_PKG_OFFLINE=true julia +1.12.6 --project=. --startup-file=no mixing_layer_mps_mac.jl --smoke-test
 ```
 
-The tests include the MAC identities, direct/coherent-state equivalence,
+The tests include periodic and channel MAC identities, conservative
+concentration fluxes, direct/coherent-state equivalence,
 stable fingerprints, one-site/two-site predictor agreement, cold/warm operator
 caching, checksummed HDF5 checkpoint round trips, corrupt-generation recovery,
 and continuous-versus-resumed TDVP equivalence.

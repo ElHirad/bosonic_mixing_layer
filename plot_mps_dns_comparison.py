@@ -38,6 +38,10 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("output_dir", type=Path, help="directory for plots and DNS data")
     parser.add_argument("--re", type=float, default=50.0)
     parser.add_argument("--pe", type=float, default=50.0)
+    parser.add_argument(
+        "--boundary-y", choices=("periodic", "free-slip"), default="periodic"
+    )
+    parser.add_argument("--shear-center", type=float, default=0.50)
     parser.add_argument("--transition-thickness", type=float, default=0.12)
     parser.add_argument("--perturbation-width", type=float, default=0.20)
     parser.add_argument("--middle-layer-fraction", type=float, default=0.30)
@@ -82,7 +86,12 @@ def run_matched_dns(
     """Advance DNS from the exact MPS velocity and concentration at t=0."""
 
     u = mps["u"][0].copy()
-    v = mps["v"][0].copy()
+    if config.boundary_y == "free-slip":
+        v = np.concatenate(
+            (mps["v"][0].copy(), np.zeros((1, config.nx), dtype=float)), axis=0
+        )
+    else:
+        v = mps["v"][0].copy()
     pressure = np.zeros_like(u)
     concentration = mps["concentration"][0].copy()
     snapshots = [
@@ -239,6 +248,64 @@ def comparison_metrics(
     return rows
 
 
+def vorticity_mode_amplitudes(omega: np.ndarray) -> np.ndarray:
+    """Streamwise modes of the negative-vorticity enstrophy density."""
+
+    density_x = np.mean(np.minimum(omega, 0.0) ** 2, axis=1)
+    density_x -= np.mean(density_x, axis=1, keepdims=True)
+    return np.abs(np.fft.rfft(density_x, axis=1)) / omega.shape[2]
+
+
+def plot_pairing_compatibility(
+    times: np.ndarray,
+    mps_modes: np.ndarray,
+    dns_modes: np.ndarray,
+    primary_mode: int,
+    subharmonic_mode: int,
+    output_path: Path,
+) -> None:
+    """Compare roll-up and pairing mode content in MPS and DNS."""
+
+    tiny = np.finfo(float).tiny
+    mps_ratio = mps_modes[:, subharmonic_mode] / np.maximum(
+        mps_modes[:, primary_mode], tiny
+    )
+    dns_ratio = dns_modes[:, subharmonic_mode] / np.maximum(
+        dns_modes[:, primary_mode], tiny
+    )
+    fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.3), constrained_layout=True)
+    for modes, method, linestyle in (
+        (mps_modes, "MPS", "-"),
+        (dns_modes, "DNS", "--"),
+    ):
+        axes[0].semilogy(
+            times,
+            modes[:, primary_mode],
+            "o" + linestyle,
+            label=f"{method} mode {primary_mode} (roll-up)",
+        )
+        axes[0].semilogy(
+            times,
+            modes[:, subharmonic_mode],
+            "s" + linestyle,
+            label=f"{method} mode {subharmonic_mode} (pairing)",
+        )
+    axes[0].set_xlabel("time")
+    axes[0].set_ylabel("negative-vorticity mode amplitude")
+    axes[0].grid(alpha=0.25)
+    axes[0].legend(fontsize=8)
+    axes[1].semilogy(times, mps_ratio, "o-", label="MPS")
+    axes[1].semilogy(times, dns_ratio, "s--", label="DNS")
+    axes[1].axhline(1.0, color="black", linestyle=":", linewidth=1.0)
+    axes[1].set_xlabel("time")
+    axes[1].set_ylabel(f"mode {subharmonic_mode} / mode {primary_mode}")
+    axes[1].grid(alpha=0.25)
+    axes[1].legend()
+    fig.suptitle("Roll-up and vortex-pairing compatibility")
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     args = parse_arguments()
     mps = load_mps(args.mps_data)
@@ -250,7 +317,8 @@ def main() -> None:
         dy=1.0 / n,
         reynolds=args.re,
         peclet=args.pe,
-        boundary_y="periodic",
+        boundary_y=args.boundary_y,
+        shear_center_fraction=args.shear_center,
         middle_layer_fraction=args.middle_layer_fraction,
         transition_thickness=args.transition_thickness,
         perturbation_width=args.perturbation_width,
@@ -265,22 +333,67 @@ def main() -> None:
     )
 
     # The saved MPS vorticity must agree with the common MAC difference stencil.
-    reconstructed_initial = vorticity(mps["u"][0], mps["v"][0], config.dx, config.dy)
+    if config.boundary_y == "free-slip":
+        mps_v_for_dns = np.concatenate(
+            (mps["v"], np.zeros((len(mps["times"]), 1, n), dtype=float)), axis=1
+        )
+        reconstructed_initial = vorticity(
+            mps["u"][0], mps_v_for_dns[0], config.dx, config.dy
+        )[:-1]
+    else:
+        mps_v_for_dns = mps["v"]
+        reconstructed_initial = vorticity(
+            mps["u"][0], mps["v"][0], config.dx, config.dy
+        )
     if not np.allclose(reconstructed_initial, mps["vorticity"][0], rtol=0.0, atol=1e-12):
         raise ValueError("MPS array orientation or vorticity convention does not match DNS")
 
     dns_snapshots, dns_concentration_snapshots, dns_steps = run_matched_dns(mps, config)
     dns_u = np.stack([snapshot.u for snapshot in dns_snapshots])
-    dns_v = np.stack([snapshot.v for snapshot in dns_snapshots])
-    dns_omega = np.stack(
+    dns_v_full = np.stack([snapshot.v for snapshot in dns_snapshots])
+    dns_omega_full = np.stack(
         [vorticity(snapshot.u, snapshot.v, config.dx, config.dy) for snapshot in dns_snapshots]
     )
+    if config.boundary_y == "free-slip":
+        dns_v = dns_v_full[:, :-1, :]
+        dns_omega = dns_omega_full[:, :-1, :]
+    else:
+        dns_v = dns_v_full
+        dns_omega = dns_omega_full
     dns_concentration = np.stack(dns_concentration_snapshots)
     vorticity_difference = mps["vorticity"] - dns_omega
     concentration_difference = mps["concentration"] - dns_concentration
     metrics = comparison_metrics(mps, dns_u, dns_v, dns_omega, dns_concentration)
 
+    if config.boundary_y == "free-slip":
+        mps_modes = vorticity_mode_amplitudes(mps["vorticity"])
+        dns_modes = vorticity_mode_amplitudes(dns_omega)
+        primary_mode = config.perturbation_mode
+        subharmonic_mode = config.subharmonic_mode
+        for index, row in enumerate(metrics):
+            row["mps_rollup_mode"] = float(mps_modes[index, primary_mode])
+            row["mps_pairing_mode"] = float(mps_modes[index, subharmonic_mode])
+            row["mps_pairing_ratio"] = float(
+                mps_modes[index, subharmonic_mode]
+                / max(mps_modes[index, primary_mode], np.finfo(float).tiny)
+            )
+            row["dns_rollup_mode"] = float(dns_modes[index, primary_mode])
+            row["dns_pairing_mode"] = float(dns_modes[index, subharmonic_mode])
+            row["dns_pairing_ratio"] = float(
+                dns_modes[index, subharmonic_mode]
+                / max(dns_modes[index, primary_mode], np.finfo(float).tiny)
+            )
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        args.output_dir / "mps_snapshots.npz",
+        times=mps["times"],
+        snapshot_steps=mps["steps"],
+        u=mps["u"],
+        v=mps_v_for_dns,
+        vorticity=mps["vorticity"],
+        concentration=mps["concentration"],
+    )
     save_snapshots(
         dns_snapshots,
         config,
@@ -310,7 +423,8 @@ def main() -> None:
     )
     case_label = (
         f"{n} x {n}, Re = {config.reynolds:g}, Pe = {config.peclet:g}, transition = "
-        f"{config.transition_thickness:g}, KH width = {config.perturbation_width:g}"
+        f"{config.transition_thickness:g}, KH width = {config.perturbation_width:g}, "
+        f"y BC = {config.boundary_y}"
     )
     plot_field_grid(
         mps["vorticity"],
@@ -320,7 +434,7 @@ def main() -> None:
         (-common_limit, common_limit),
         r"vorticity $\omega = \partial_x v - \partial_y u$",
         "RdBu_r",
-        velocities=(mps["u"], mps["v"]),
+        velocities=(mps["u"], mps_v_for_dns),
     )
     plot_field_grid(
         dns_omega,
@@ -330,7 +444,7 @@ def main() -> None:
         (-common_limit, common_limit),
         r"vorticity $\omega = \partial_x v - \partial_y u$",
         "RdBu_r",
-        velocities=(dns_u, dns_v),
+        velocities=(dns_u, dns_v_full),
     )
     annotations = [f"rel. L2 = {row['vorticity_relative_l2']:.2e}" for row in metrics]
     plot_field_grid(
@@ -351,7 +465,7 @@ def main() -> None:
         (concentration_minimum, concentration_maximum),
         r"concentration $c$",
         "viridis",
-        velocities=(mps["u"], mps["v"]),
+        velocities=(mps["u"], mps_v_for_dns),
     )
     plot_field_grid(
         dns_concentration,
@@ -361,7 +475,7 @@ def main() -> None:
         (concentration_minimum, concentration_maximum),
         r"concentration $c$",
         "viridis",
-        velocities=(dns_u, dns_v),
+        velocities=(dns_u, dns_v_full),
     )
     concentration_annotations = [
         f"rel. L2 = {row['concentration_relative_l2']:.2e}" for row in metrics
@@ -376,6 +490,15 @@ def main() -> None:
         "RdBu_r",
         annotations=concentration_annotations,
     )
+    if config.boundary_y == "free-slip":
+        plot_pairing_compatibility(
+            mps["times"],
+            mps_modes,
+            dns_modes,
+            config.perturbation_mode,
+            config.subharmonic_mode,
+            args.output_dir / "pairing_compatibility.png",
+        )
 
     with (args.output_dir / "comparison_metrics.csv").open("w", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=list(metrics[0]), lineterminator="\n")
@@ -386,6 +509,8 @@ def main() -> None:
         "dns_steps": dns_steps,
         "config": {
             "n": n,
+            "boundary_y": config.boundary_y,
+            "shear_center_fraction": config.shear_center_fraction,
             "reynolds": config.reynolds,
             "peclet": config.peclet,
             "transition_thickness": config.transition_thickness,
@@ -411,12 +536,14 @@ def main() -> None:
             f"concentration_rel_l2={row['concentration_relative_l2']:.6e}"
         )
     for name in (
+        "mps_snapshots.npz",
         "mps_vorticity.png",
         "dns_vorticity.png",
         "mps_minus_dns_vorticity.png",
         "mps_concentration.png",
         "dns_concentration.png",
         "mps_minus_dns_concentration.png",
+        *(('pairing_compatibility.png',) if config.boundary_y == 'free-slip' else ()),
     ):
         print(f"saved: {args.output_dir / name}")
 
