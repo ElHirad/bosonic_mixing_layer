@@ -1,9 +1,13 @@
-# Mixing-layer simulation by coherent amplitudes instead of TDVP
+# Mixing-layer simulation: coherent reduction and single-site mean field
 
 This note derives a direct coherent-amplitude formulation for the velocity,
-pressure impulse, and conserved concentration in this repository. It describes
-the proposed replacement for the bosonic MPS time evolution; it does not claim
-that a new solver has already been implemented or run.
+pressure impulse, and conserved concentration in this repository. The current
+implementation, following the requested explicit-operator choice, retains
+single-site Fock vectors and creation/annihilation matrices at **every stage**.
+See [the implemented algorithm](./SINGLE_SITE_MEAN_FIELD_README.md) and
+[the solver](./mixing_layer_mean_field.py). The amplitude-only and direct
+Poisson alternatives discussed below are theoretical/reference alternatives,
+not production substeps in that implementation.
 
 The central result is
 
@@ -740,7 +744,13 @@ states. The exact reduction here depends on the specific
 $a_r^\dagger F_r(a)$ structure, not merely on choosing a coherent
 initial condition.
 
-## 12. Implementation and verification workflow
+## 12. Direct-amplitude alternative and verification workflow
+
+The following pseudocode describes the amplitude-only alternative, **not**
+the selected single-site operator implementation. The latter advances local
+Fock vectors under the fully decoupled generators for predictor, pressure
+relaxation, and correction, as derived in
+[the single-site implementation note](./SINGLE_SITE_MEAN_FIELD_README.md).
 
 The direct implementation can keep four real arrays, compute the flux
 residuals in Section 6, and use either algorithm in Section 9. For the
@@ -803,8 +813,11 @@ both wall rows; the MPS snapshots omit the implicit top row. Align these
 layouts before taking norms.
 
 For the existing pairing diagnostic, form
-$q(x_i)=\sum_j\max[-\omega_{j,i},0]$ and the discrete Fourier magnitudes
-$A_m=|\sum_iq(x_i)e^{-2\pi\mathrm{i}m(i-1)/n}|$, where $\mathrm{i}^2=-1$.
+$q(x_i)=N_y^{-1}\sum_j\min[\omega_{j,i},0]^2$ (negative-vorticity
+enstrophy density) and the discrete Fourier magnitudes
+$A_m=n^{-1}|\sum_i(q(x_i)-\bar q)e^{-2\pi\mathrm{i}m(i-1)/n}|$,
+where $\mathrm{i}^2=-1$. Use the same number $N_y$ of vertex rows in both
+datasets when comparing absolute amplitudes.
 Plot $A_1,A_2$, and $A_1/A_2$
 alongside vorticity and concentration snapshots. A ratio crossing one
 indicates subharmonic dominance, but can also reflect faster decay of

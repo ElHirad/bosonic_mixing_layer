@@ -1,5 +1,49 @@
 # 2-D incompressible mixing-layer solvers
 
+## Explicit single-site bosonic mean-field solver (current)
+
+[`mixing_layer_mean_field.py`](./mixing_layer_mean_field.py) replaces TDVP
+with self-consistent **single-site Fock-vector evolution** under explicit
+creation, annihilation, and identity matrices. Momentum and concentration,
+pressure relaxation, and velocity correction all use mean-field operators.
+There is no amplitude-only evolution, direct Poisson solver, DNS dependency,
+coherent-state resetting, or scalar-mass repair in this solver.
+
+The defaults retain the last 16×16 single-layer case: Re=Pe=50, thickness
+0.04, mode-2/mode-1 seed amplitudes 2.5/0.5, and 260 steps to time 0.65.
+The local cutoff is increased to 12 and checked against 16.
+See the [algorithm and operator derivation](./SINGLE_SITE_MEAN_FIELD_README.md)
+and [cluster workflow](./hpc/README.md).
+
+The completed single-site production run passes all 260 steps with maximum
+raw relative scalar-mass drift `5.1e-13`, without a mass correction. Its final
+vorticity differs from the saved MPS trajectory by `0.035%`.
+The centered scalar transport remains non-bound-preserving; its brief
+concentration overshoots are retained and displayed in the diagnostics.
+
+- [Single-site vorticity snapshots](./outputs/mean_field_sites_16x16_re50_pe50_single_freeslip/mean_field_vorticity.png)
+- [Single-site concentration snapshots](./outputs/mean_field_sites_16x16_re50_pe50_single_freeslip/mean_field_concentration.png)
+- [Pairing, conservation, and local-state diagnostics](./outputs/mean_field_sites_16x16_re50_pe50_single_freeslip/mean_field_diagnostics.png)
+- [Mean-field vs DNS vorticity and signed differences](./outputs/mean_field_sites_16x16_re50_pe50_single_freeslip/mean_field_vs_dns_vorticity.png)
+- [Mean-field vs DNS concentration and signed differences](./outputs/mean_field_sites_16x16_re50_pe50_single_freeslip/mean_field_vs_dns_concentration.png)
+- [DNS comparison: errors, pairing, and conservation](./outputs/mean_field_sites_16x16_re50_pe50_single_freeslip/mean_field_vs_dns_diagnostics.png)
+- [Run verification and convergence report](./outputs/mean_field_sites_16x16_re50_pe50_single_freeslip/RUN_REPORT.md)
+
+The separate matched DNS benchmark starts from the **exact measured initial
+mean-field fields**, uses the same physical setup and output times, and
+advances with the existing projected-midpoint DNS method. Final relative
+differences are `0.889%` in velocity, `2.065%` in vorticity, and `0.623%` in
+concentration. This benchmark is not a stage of the mean-field algorithm;
+different time splitting is retained and explicitly documented.
+
+```bash
+OPENBLAS_NUM_THREADS=1 python3 mixing_layer_mean_field.py --output-dir /path/to/new/run
+sbatch --clusters=htc hpc/mean_field_cpu.sbatch
+```
+
+The original DNS and TDVP/MPS programs below are retained as reference
+implementations and for reproducing earlier results.
+
 ## Finite-amplitude 16×16 single-layer DNS
 
 [`mixing_layer_dns.py`](./mixing_layer_dns.py) runs one centered shear layer on

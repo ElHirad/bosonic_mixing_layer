@@ -1,5 +1,33 @@
 # CPU/SLURM workflow
 
+## Current explicit single-site mean-field calculation
+
+Use `mean_field_cpu.sbatch` for the all-stage single-site operator solver:
+
+```bash
+sbatch --clusters=htc hpc/mean_field_cpu.sbatch
+sbatch --clusters=htc --export=ALL,MF_CUTOFF=16 hpc/mean_field_cpu.sbatch
+```
+
+The default case is 16×16, Re=Pe=50, one free-slip-y shear layer, thickness
+0.04, KH width 0.12, amplitudes 2.5 and 0.5, and 260 steps to time 0.65.
+It requests one CPU, 2 GiB, and one hour. No Julia/MPS environment or operator
+cache is needed; Python, NumPy, and SciPy must already be installed.
+
+Set `MF_RUN_DIR` for persistent results, `MF_CUTOFF` for maximum local boson
+occupation (default 12), `MF_PRESSURE_CFL` for the pressure pseudo-time factor
+(default 0.125), and `MF_SUBSTEPS` for predictor/correction RK4 subdivisions
+(default 8). Use a **different** directory for changed parameters. For a
+local-integration convergence check, halve `MF_PRESSURE_CFL` and double
+`MF_SUBSTEPS`; do not change the physical case.
+
+The batch script freezes the production modules, auto-resumes matching local
+state checkpoints, and validates complete results from saved Fock vectors.
+The solver has no DNS or direct pressure-solve stage. See
+[the full operator algorithm](../SINGLE_SITE_MEAN_FIELD_README.md).
+
+## Historical MPS/TDVP workflow
+
 The MPS solver is single-process and single-node. It does not use MPI or Julia
 workers. Request one SLURM task and use physical CPU cores within that task.
 

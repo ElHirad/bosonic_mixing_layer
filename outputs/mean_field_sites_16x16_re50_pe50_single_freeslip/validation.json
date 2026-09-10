@@ -1,0 +1,103 @@
+{
+  "validated": true,
+  "completed_steps": 260,
+  "snapshots": 8,
+  "config": {
+    "n": 16,
+    "reynolds": 50.0,
+    "peclet": 50.0,
+    "dt": 0.0025,
+    "final_time": 0.65,
+    "boundary_y": "free-slip",
+    "shear_center": 0.5,
+    "middle_fraction": 0.3,
+    "transition": 0.04,
+    "kh_width": 0.12,
+    "kh_mode": 2,
+    "kh_amplitude": 2.5,
+    "secondary_mode": 1,
+    "secondary_amplitude": 0.5,
+    "phase": 0.0,
+    "velocity_scale": 8.0,
+    "pressure_scale": 4.0,
+    "scalar_scale": 4.0,
+    "boson_cutoff": 12,
+    "predictor_substeps": 8,
+    "correction_substeps": 8,
+    "pressure_cfl": 0.125,
+    "pressure_tolerance": 1e-08,
+    "pressure_max_steps": 12000
+  },
+  "fingerprint": "dbf33161c7ad5a51989b7c294902e3a11286118e7c8cbdbe20b40999f0b2c207",
+  "worst_step": {
+    "relative_divergence": 2.915943467663853e-10,
+    "scalar_mass_error": 5.052624985069087e-13,
+    "pressure_mean": 2.612411372510273e-10,
+    "wall_normal_velocity": 0.0,
+    "coherent_eigenstate_defect": 2.0149588214118788e-10,
+    "maximum_ceiling_probability": 4.6095753944343845e-21,
+    "maximum_norm_error": 4.440892098500626e-16,
+    "maximum_imaginary_amplitude": 0.0,
+    "pressure_velocity_leakage": 1.461270958799304e-13,
+    "pressure_scalar_leakage": 6.050989889451661e-17,
+    "correction_pressure_leakage": 4.222788970680744e-09,
+    "correction_scalar_leakage": 2.0611486885233348e-17,
+    "pressure_residual": 9.991047411801627e-09
+  },
+  "total_pressure_iterations": 166380,
+  "final_step": {
+    "step": 260,
+    "time": 0.65,
+    "relative_divergence": 9.176780653543534e-12,
+    "max_divergence": 2.1990165244289983e-10,
+    "scalar_mass_error": 5.052624985069087e-13,
+    "scalar_mass": 0.49999999999974737,
+    "scalar_minimum": 0.007773331344661893,
+    "scalar_maximum": 0.9932955161594884,
+    "pressure_mean": 2.611581300006536e-10,
+    "wall_normal_velocity": 0.0,
+    "kinetic_energy": 0.321293208078512,
+    "coherent_eigenstate_defect": 2.0149588214118788e-10,
+    "maximum_ceiling_probability": 5.960784573728456e-24,
+    "maximum_norm_error": 2.220446049250313e-16,
+    "maximum_imaginary_amplitude": 0.0,
+    "pressure_residual": 9.315403411268657e-09,
+    "pressure_iterations": 660,
+    "pressure_pseudo_time": 0.322265625,
+    "pressure_velocity_leakage": 3.377194792824237e-14,
+    "pressure_scalar_leakage": 2.6369314058877983e-17,
+    "correction_pressure_leakage": 1.3133347448403862e-10,
+    "correction_scalar_leakage": 0.0
+  },
+  "run_metadata": {
+    "elapsed_seconds": 130.6991661414504,
+    "hostname": "htc-n79.crc.pitt.edu",
+    "slurm_job_id": "11215322",
+    "numpy": "1.23.5",
+    "scipy": "1.11.2",
+    "python": "3.9.21",
+    "resumed_from_step": 0,
+    "state_representation": "product of explicit single-site Fock vectors",
+    "local_generator": "f_j a_j^dagger + b_j a_j + c_j I",
+    "pressure_method": "single-site mean-field operator relaxation (RK4)",
+    "mass_projection": false,
+    "coherent_state_reset": false,
+    "tdvp": false,
+    "direct_poisson_solve": false,
+    "operator_counts": {
+      "amplitude_modes": 1040,
+      "predictor": {
+        "linear_monomials": 3664,
+        "quadratic_monomials": 7744
+      },
+      "pressure": {
+        "linear_monomials": 2240,
+        "quadratic_monomials": 0
+      },
+      "correction": {
+        "linear_monomials": 992,
+        "quadratic_monomials": 0
+      }
+    }
+  }
+}

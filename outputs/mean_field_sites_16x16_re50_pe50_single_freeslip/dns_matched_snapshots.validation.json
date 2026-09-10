@@ -1,0 +1,67 @@
+{
+  "validated": true,
+  "completed_steps": 260,
+  "snapshots": 8,
+  "initial": {
+    "relative_divergence": 1.6568415045620344e-16,
+    "max_divergence": 2.3092638912203256e-14,
+    "scalar_mass_error": 0.0,
+    "scalar_mass": 0.5,
+    "scalar_minimum": 0.0,
+    "scalar_maximum": 1.0,
+    "wall_normal_velocity": 0.0,
+    "pressure_mean": 0.0
+  },
+  "worst_step": {
+    "relative_divergence": 6.876487552624836e-17,
+    "max_divergence": 7.105427357601002e-15,
+    "scalar_mass_error": 2.220446049250313e-16,
+    "wall_normal_velocity": 0.0,
+    "pressure_mean": 2.7755575615628914e-17
+  },
+  "concentration_range_all_steps": {
+    "minimum": -0.07338104601169763,
+    "maximum": 1.0733810460116975
+  },
+  "config": {
+    "nx": 16,
+    "ny": 16,
+    "dx": 0.0625,
+    "dy": 0.0625,
+    "reynolds": 50.0,
+    "peclet": 50.0,
+    "reference_velocity": 1.0,
+    "boundary_y": "free-slip",
+    "shear_center_fraction": 0.5,
+    "middle_layer_fraction": 0.3,
+    "transition_thickness": 0.04,
+    "perturbation_width": 0.12,
+    "perturbation_mode": 2,
+    "perturbation_amplitude": 2.5,
+    "subharmonic_mode": 1,
+    "subharmonic_amplitude": 0.5,
+    "perturbation_phase": 0.0,
+    "cfl": 0.35,
+    "diffusion_safety": 0.8,
+    "max_dt": 0.0025,
+    "t_end": 0.65,
+    "n_snapshots": 8
+  },
+  "metadata": {
+    "method": "independent DNS: projected midpoint with direct discrete pressure solve",
+    "initialization": "exact measured u, v, concentration from the mean-field t=0 snapshot",
+    "mean_field_source_file": "outputs/mean_field_sites_16x16_re50_pe50_single_freeslip/mean_field_snapshots.npz",
+    "mean_field_fingerprint": "dbf33161c7ad5a51989b7c294902e3a11286118e7c8cbdbe20b40999f0b2c207",
+    "source_sha256": {
+      "compare_mean_field_dns.py": "fa0a5cde2847a87b64a82c9fdd7bf3916ebf9dd0898b86882c96f49ad63211d9",
+      "mixing_layer_dns.py": "3e866ba1a591e3e79fb1439f3cd6c905d845a4d660cf866a364655ded3709439"
+    },
+    "elapsed_seconds": 0.2350272568874061,
+    "hostname": "login0.crc.pitt.edu",
+    "numpy": "1.23.5",
+    "scipy": "1.11.2",
+    "python": "3.9.21",
+    "mass_projection": false,
+    "scalar_clipping": false
+  }
+}

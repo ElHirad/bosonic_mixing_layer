@@ -1,0 +1,695 @@
+{
+  "validation": {
+    "validated": true,
+    "completed_steps": 260,
+    "snapshots": 8,
+    "config": {
+      "n": 16,
+      "reynolds": 50.0,
+      "peclet": 50.0,
+      "dt": 0.0025,
+      "final_time": 0.65,
+      "boundary_y": "free-slip",
+      "shear_center": 0.5,
+      "middle_fraction": 0.3,
+      "transition": 0.04,
+      "kh_width": 0.12,
+      "kh_mode": 2,
+      "kh_amplitude": 2.5,
+      "secondary_mode": 1,
+      "secondary_amplitude": 0.5,
+      "phase": 0.0,
+      "velocity_scale": 8.0,
+      "pressure_scale": 4.0,
+      "scalar_scale": 4.0,
+      "boson_cutoff": 12,
+      "predictor_substeps": 8,
+      "correction_substeps": 8,
+      "pressure_cfl": 0.125,
+      "pressure_tolerance": 1e-08,
+      "pressure_max_steps": 12000
+    },
+    "fingerprint": "dbf33161c7ad5a51989b7c294902e3a11286118e7c8cbdbe20b40999f0b2c207",
+    "worst_step": {
+      "relative_divergence": 2.915943467663853e-10,
+      "scalar_mass_error": 5.052624985069087e-13,
+      "pressure_mean": 2.612411372510273e-10,
+      "wall_normal_velocity": 0.0,
+      "coherent_eigenstate_defect": 2.0149588214118788e-10,
+      "maximum_ceiling_probability": 4.6095753944343845e-21,
+      "maximum_norm_error": 4.440892098500626e-16,
+      "maximum_imaginary_amplitude": 0.0,
+      "pressure_velocity_leakage": 1.461270958799304e-13,
+      "pressure_scalar_leakage": 6.050989889451661e-17,
+      "correction_pressure_leakage": 4.222788970680744e-09,
+      "correction_scalar_leakage": 2.0611486885233348e-17,
+      "pressure_residual": 9.991047411801627e-09
+    },
+    "total_pressure_iterations": 166380,
+    "final_step": {
+      "step": 260,
+      "time": 0.65,
+      "relative_divergence": 9.176780653543534e-12,
+      "max_divergence": 2.1990165244289983e-10,
+      "scalar_mass_error": 5.052624985069087e-13,
+      "scalar_mass": 0.49999999999974737,
+      "scalar_minimum": 0.007773331344661893,
+      "scalar_maximum": 0.9932955161594884,
+      "pressure_mean": 2.611581300006536e-10,
+      "wall_normal_velocity": 0.0,
+      "kinetic_energy": 0.321293208078512,
+      "coherent_eigenstate_defect": 2.0149588214118788e-10,
+      "maximum_ceiling_probability": 5.960784573728456e-24,
+      "maximum_norm_error": 2.220446049250313e-16,
+      "maximum_imaginary_amplitude": 0.0,
+      "pressure_residual": 9.315403411268657e-09,
+      "pressure_iterations": 660,
+      "pressure_pseudo_time": 0.322265625,
+      "pressure_velocity_leakage": 3.377194792824237e-14,
+      "pressure_scalar_leakage": 2.6369314058877983e-17,
+      "correction_pressure_leakage": 1.3133347448403862e-10,
+      "correction_scalar_leakage": 0.0
+    },
+    "run_metadata": {
+      "elapsed_seconds": 130.6991661414504,
+      "hostname": "htc-n79.crc.pitt.edu",
+      "slurm_job_id": "11215322",
+      "numpy": "1.23.5",
+      "scipy": "1.11.2",
+      "python": "3.9.21",
+      "resumed_from_step": 0,
+      "state_representation": "product of explicit single-site Fock vectors",
+      "local_generator": "f_j a_j^dagger + b_j a_j + c_j I",
+      "pressure_method": "single-site mean-field operator relaxation (RK4)",
+      "mass_projection": false,
+      "coherent_state_reset": false,
+      "tdvp": false,
+      "direct_poisson_solve": false,
+      "operator_counts": {
+        "amplitude_modes": 1040,
+        "predictor": {
+          "linear_monomials": 3664,
+          "quadratic_monomials": 7744
+        },
+        "pressure": {
+          "linear_monomials": 2240,
+          "quadratic_monomials": 0
+        },
+        "correction": {
+          "linear_monomials": 992,
+          "quadratic_monomials": 0
+        }
+      }
+    }
+  },
+  "pairing": {
+    "definition": "Fourier amplitudes of y-mean negative-vorticity squared; includes both wall rows",
+    "times": [
+      0.0,
+      0.0925,
+      0.185,
+      0.2775,
+      0.3725,
+      0.465,
+      0.5575,
+      0.65
+    ],
+    "primary_mode": [
+      113.47915035414164,
+      46.20031966857799,
+      23.502794375104493,
+      11.619195468326275,
+      4.661963059521101,
+      1.1161170958141389,
+      0.35017375103456294,
+      0.6525368389406232
+    ],
+    "secondary_mode": [
+      7.822165940270351,
+      3.38438289421895,
+      3.0282857797655387,
+      3.414022129373495,
+      3.897713659277496,
+      4.130979067019327,
+      3.9992443658285732,
+      3.602221750959777
+    ],
+    "ratio": [
+      0.06893042392244934,
+      0.07325453413519896,
+      0.12884790342093416,
+      0.29382603457184797,
+      0.8360670407538339,
+      3.7012057986675955,
+      11.420742856976275,
+      5.52033469375904
+    ],
+    "caution": "A ratio crossing one is not by itself evidence of vortex merging; inspect spatial fields."
+  },
+  "concentration_range_all_steps": {
+    "minimum": -0.0726354071120677,
+    "maximum": 1.0817469293148936,
+    "caution": "Centered conservative transport is not bound-preserving; no clipping is applied."
+  },
+  "references": {
+    "MPS": {
+      "file": "outputs/mps_dns_16x16_re50_pe50_single_freeslip_delta004_largekh/mps_snapshots.npz",
+      "metrics": [
+        {
+          "time": 0.0,
+          "concentration_relative_l2": 3.2267216579714894e-07,
+          "concentration_max_abs": 3.413719554812289e-07,
+          "vorticity_relative_l2": 1.2387965697364285e-06,
+          "vorticity_max_abs": 0.0001399340292209672,
+          "velocity_relative_l2": 7.852532643730447e-07
+        },
+        {
+          "time": 0.0925,
+          "concentration_relative_l2": 0.0002616220729814107,
+          "concentration_max_abs": 0.0010754373499712866,
+          "vorticity_relative_l2": 0.0007077668736698115,
+          "vorticity_max_abs": 0.028473498508709838,
+          "velocity_relative_l2": 0.00031727136751826527
+        },
+        {
+          "time": 0.185,
+          "concentration_relative_l2": 0.0003032515775626021,
+          "concentration_max_abs": 0.0010097235816420858,
+          "vorticity_relative_l2": 0.0006969564672410487,
+          "vorticity_max_abs": 0.017904272957370182,
+          "velocity_relative_l2": 0.00030007691411196633
+        },
+        {
+          "time": 0.2775,
+          "concentration_relative_l2": 0.00029653585663257467,
+          "concentration_max_abs": 0.0007957241914150481,
+          "vorticity_relative_l2": 0.000633132779451327,
+          "vorticity_max_abs": 0.01215603182237146,
+          "velocity_relative_l2": 0.0002542636835423698
+        },
+        {
+          "time": 0.3725,
+          "concentration_relative_l2": 0.00028032514661679157,
+          "concentration_max_abs": 0.0006546767600481562,
+          "vorticity_relative_l2": 0.0005548225941024762,
+          "vorticity_max_abs": 0.00785602113003847,
+          "velocity_relative_l2": 0.00021730250035172536
+        },
+        {
+          "time": 0.465,
+          "concentration_relative_l2": 0.00026325133063150106,
+          "concentration_max_abs": 0.0005453241883645599,
+          "vorticity_relative_l2": 0.0004762658352382622,
+          "vorticity_max_abs": 0.004824907436484338,
+          "velocity_relative_l2": 0.00019358329974472044
+        },
+        {
+          "time": 0.5575,
+          "concentration_relative_l2": 0.0002443792355666276,
+          "concentration_max_abs": 0.00046367511185779753,
+          "vorticity_relative_l2": 0.00040733447640153874,
+          "vorticity_max_abs": 0.0031915997971312393,
+          "velocity_relative_l2": 0.00017752623789780774
+        },
+        {
+          "time": 0.65,
+          "concentration_relative_l2": 0.00022472613132083817,
+          "concentration_max_abs": 0.0003966226532706729,
+          "vorticity_relative_l2": 0.0003524016950869654,
+          "vorticity_max_abs": 0.002663666496771633,
+          "velocity_relative_l2": 0.0001661128906866193
+        }
+      ],
+      "identical_initial_fields": false,
+      "metadata": null,
+      "validation": null
+    },
+    "DNS": {
+      "file": "outputs/mean_field_sites_16x16_re50_pe50_single_freeslip/dns_matched_snapshots.npz",
+      "metrics": [
+        {
+          "time": 0.0,
+          "concentration_relative_l2": 0.0,
+          "concentration_max_abs": 0.0,
+          "vorticity_relative_l2": 0.0,
+          "vorticity_max_abs": 0.0,
+          "velocity_relative_l2": 0.0
+        },
+        {
+          "time": 0.0925,
+          "concentration_relative_l2": 0.012084653924554139,
+          "concentration_max_abs": 0.054667296192351555,
+          "vorticity_relative_l2": 0.05289023878703686,
+          "vorticity_max_abs": 3.5251228492090405,
+          "velocity_relative_l2": 0.019455756138696198
+        },
+        {
+          "time": 0.185,
+          "concentration_relative_l2": 0.013527858689860934,
+          "concentration_max_abs": 0.045095386398673276,
+          "vorticity_relative_l2": 0.05141483164684065,
+          "vorticity_max_abs": 1.9543287086427377,
+          "velocity_relative_l2": 0.017044717585072835
+        },
+        {
+          "time": 0.2775,
+          "concentration_relative_l2": 0.01240969454326466,
+          "concentration_max_abs": 0.0357319212910826,
+          "vorticity_relative_l2": 0.04234976579703502,
+          "vorticity_max_abs": 1.049505774914234,
+          "velocity_relative_l2": 0.013068867508931185
+        },
+        {
+          "time": 0.3725,
+          "concentration_relative_l2": 0.010273932342217575,
+          "concentration_max_abs": 0.02819674483877377,
+          "vorticity_relative_l2": 0.033351011464807026,
+          "vorticity_max_abs": 0.6802044774398208,
+          "velocity_relative_l2": 0.01025666629788344
+        },
+        {
+          "time": 0.465,
+          "concentration_relative_l2": 0.00818414406544762,
+          "concentration_max_abs": 0.019206700517654218,
+          "vorticity_relative_l2": 0.026646669410639583,
+          "vorticity_max_abs": 0.41195415699886695,
+          "velocity_relative_l2": 0.00897474964958901
+        },
+        {
+          "time": 0.5575,
+          "concentration_relative_l2": 0.006786570834427982,
+          "concentration_max_abs": 0.014312130847760896,
+          "vorticity_relative_l2": 0.022533154855060775,
+          "vorticity_max_abs": 0.24032718030880762,
+          "velocity_relative_l2": 0.008725184371024972
+        },
+        {
+          "time": 0.65,
+          "concentration_relative_l2": 0.006234529455077252,
+          "concentration_max_abs": 0.011412640369659943,
+          "vorticity_relative_l2": 0.020645439834194215,
+          "vorticity_max_abs": 0.17654681675165307,
+          "velocity_relative_l2": 0.008892431060462674
+        }
+      ],
+      "identical_initial_fields": true,
+      "metadata": {
+        "method": "independent DNS: projected midpoint with direct discrete pressure solve",
+        "initialization": "exact measured u, v, concentration from the mean-field t=0 snapshot",
+        "mean_field_source_file": "outputs/mean_field_sites_16x16_re50_pe50_single_freeslip/mean_field_snapshots.npz",
+        "mean_field_fingerprint": "dbf33161c7ad5a51989b7c294902e3a11286118e7c8cbdbe20b40999f0b2c207",
+        "source_sha256": {
+          "compare_mean_field_dns.py": "fa0a5cde2847a87b64a82c9fdd7bf3916ebf9dd0898b86882c96f49ad63211d9",
+          "mixing_layer_dns.py": "3e866ba1a591e3e79fb1439f3cd6c905d845a4d660cf866a364655ded3709439"
+        },
+        "elapsed_seconds": 0.2350272568874061,
+        "hostname": "login0.crc.pitt.edu",
+        "numpy": "1.23.5",
+        "scipy": "1.11.2",
+        "python": "3.9.21",
+        "mass_projection": false,
+        "scalar_clipping": false
+      },
+      "validation": {
+        "validated": true,
+        "completed_steps": 260,
+        "snapshots": 8,
+        "initial": {
+          "relative_divergence": 1.6568415045620344e-16,
+          "max_divergence": 2.3092638912203256e-14,
+          "scalar_mass_error": 0.0,
+          "scalar_mass": 0.5,
+          "scalar_minimum": 0.0,
+          "scalar_maximum": 1.0,
+          "wall_normal_velocity": 0.0,
+          "pressure_mean": 0.0
+        },
+        "worst_step": {
+          "relative_divergence": 6.876487552624836e-17,
+          "max_divergence": 7.105427357601002e-15,
+          "scalar_mass_error": 2.220446049250313e-16,
+          "wall_normal_velocity": 0.0,
+          "pressure_mean": 2.7755575615628914e-17
+        },
+        "concentration_range_all_steps": {
+          "minimum": -0.07338104601169763,
+          "maximum": 1.0733810460116975
+        }
+      }
+    }
+  },
+  "convergence": {
+    "larger_basis": {
+      "validation": {
+        "validated": true,
+        "completed_steps": 260,
+        "snapshots": 8,
+        "config": {
+          "n": 16,
+          "reynolds": 50.0,
+          "peclet": 50.0,
+          "dt": 0.0025,
+          "final_time": 0.65,
+          "boundary_y": "free-slip",
+          "shear_center": 0.5,
+          "middle_fraction": 0.3,
+          "transition": 0.04,
+          "kh_width": 0.12,
+          "kh_mode": 2,
+          "kh_amplitude": 2.5,
+          "secondary_mode": 1,
+          "secondary_amplitude": 0.5,
+          "phase": 0.0,
+          "velocity_scale": 8.0,
+          "pressure_scale": 4.0,
+          "scalar_scale": 4.0,
+          "boson_cutoff": 16,
+          "predictor_substeps": 8,
+          "correction_substeps": 8,
+          "pressure_cfl": 0.125,
+          "pressure_tolerance": 1e-08,
+          "pressure_max_steps": 12000
+        },
+        "fingerprint": "ecf31f7d78a4686a9128c25b30b98ee0578710fec15899b0066f78644a332c9a",
+        "worst_step": {
+          "relative_divergence": 2.9159436086538887e-10,
+          "scalar_mass_error": 5.052624985069087e-13,
+          "pressure_mean": 2.6124110685482646e-10,
+          "wall_normal_velocity": 0.0,
+          "coherent_eigenstate_defect": 2.0149588219679711e-10,
+          "maximum_ceiling_probability": 1.4211264571215263e-29,
+          "maximum_norm_error": 3.3306690738754696e-16,
+          "maximum_imaginary_amplitude": 0.0,
+          "pressure_velocity_leakage": 1.461391251959473e-13,
+          "pressure_scalar_leakage": 6.44994374177501e-17,
+          "correction_pressure_leakage": 4.222788970680743e-09,
+          "correction_scalar_leakage": 0.0,
+          "pressure_residual": 9.991047793146347e-09
+        },
+        "total_pressure_iterations": 166380,
+        "final_step": {
+          "step": 260,
+          "time": 0.65,
+          "relative_divergence": 9.176779306377404e-12,
+          "max_divergence": 2.199023185767146e-10,
+          "scalar_mass_error": 5.052624985069087e-13,
+          "scalar_mass": 0.49999999999974737,
+          "scalar_minimum": 0.00777333134466188,
+          "scalar_maximum": 0.9932955161594884,
+          "pressure_mean": 2.6115809466328605e-10,
+          "wall_normal_velocity": 0.0,
+          "kinetic_energy": 0.32129320807851225,
+          "coherent_eigenstate_defect": 2.0149588219679711e-10,
+          "maximum_ceiling_probability": 1.2759336432708594e-32,
+          "maximum_norm_error": 3.3306690738754696e-16,
+          "maximum_imaginary_amplitude": 0.0,
+          "pressure_residual": 9.315403727906853e-09,
+          "pressure_iterations": 660,
+          "pressure_pseudo_time": 0.322265625,
+          "pressure_velocity_leakage": 3.3772409683159116e-14,
+          "pressure_scalar_leakage": 2.877128040449323e-17,
+          "correction_pressure_leakage": 1.3133347448403839e-10,
+          "correction_scalar_leakage": 0.0
+        },
+        "run_metadata": {
+          "elapsed_seconds": 585.042866140604,
+          "hostname": "htc-n49.crc.pitt.edu",
+          "slurm_job_id": "11215323",
+          "numpy": "1.23.5",
+          "scipy": "1.11.2",
+          "python": "3.9.21",
+          "resumed_from_step": 0,
+          "state_representation": "product of explicit single-site Fock vectors",
+          "local_generator": "f_j a_j^dagger + b_j a_j + c_j I",
+          "pressure_method": "single-site mean-field operator relaxation (RK4)",
+          "mass_projection": false,
+          "coherent_state_reset": false,
+          "tdvp": false,
+          "direct_poisson_solve": false,
+          "operator_counts": {
+            "amplitude_modes": 1040,
+            "predictor": {
+              "linear_monomials": 3664,
+              "quadratic_monomials": 7744
+            },
+            "pressure": {
+              "linear_monomials": 2240,
+              "quadratic_monomials": 0
+            },
+            "correction": {
+              "linear_monomials": 992,
+              "quadratic_monomials": 0
+            }
+          }
+        }
+      },
+      "metrics": [
+        {
+          "time": 0.0,
+          "concentration_relative_l2": 8.949599497137846e-17,
+          "concentration_max_abs": 2.220446049250313e-16,
+          "vorticity_relative_l2": 1.7460217729303635e-16,
+          "vorticity_max_abs": 1.4210854715202004e-14,
+          "velocity_relative_l2": 9.077458369000445e-17
+        },
+        {
+          "time": 0.0925,
+          "concentration_relative_l2": 4.754078976834883e-16,
+          "concentration_max_abs": 1.9984014443252818e-15,
+          "vorticity_relative_l2": 3.0824019621587145e-15,
+          "vorticity_max_abs": 1.652011860642233e-13,
+          "velocity_relative_l2": 1.1541212372766495e-15
+        },
+        {
+          "time": 0.185,
+          "concentration_relative_l2": 5.994348265059076e-16,
+          "concentration_max_abs": 1.7763568394002505e-15,
+          "vorticity_relative_l2": 3.047124336947712e-15,
+          "vorticity_max_abs": 7.815970093361102e-14,
+          "velocity_relative_l2": 1.077970270014563e-15
+        },
+        {
+          "time": 0.2775,
+          "concentration_relative_l2": 6.20359253672322e-16,
+          "concentration_max_abs": 2.1094237467877974e-15,
+          "vorticity_relative_l2": 2.5974871733190542e-15,
+          "vorticity_max_abs": 3.907985046680551e-14,
+          "velocity_relative_l2": 8.713212199417714e-16
+        },
+        {
+          "time": 0.3725,
+          "concentration_relative_l2": 5.531414138388909e-16,
+          "concentration_max_abs": 1.27675647831893e-15,
+          "vorticity_relative_l2": 2.645989044077672e-15,
+          "vorticity_max_abs": 4.085620730620576e-14,
+          "velocity_relative_l2": 7.989581534358133e-16
+        },
+        {
+          "time": 0.465,
+          "concentration_relative_l2": 5.131829049542435e-16,
+          "concentration_max_abs": 1.1102230246251565e-15,
+          "vorticity_relative_l2": 2.86381544262453e-15,
+          "vorticity_max_abs": 3.8413716652030416e-14,
+          "velocity_relative_l2": 8.012182683482236e-16
+        },
+        {
+          "time": 0.5575,
+          "concentration_relative_l2": 4.899485689000893e-16,
+          "concentration_max_abs": 1.1102230246251565e-15,
+          "vorticity_relative_l2": 2.8353912643176632e-15,
+          "vorticity_max_abs": 3.419486915845482e-14,
+          "velocity_relative_l2": 7.365946642706663e-16
+        },
+        {
+          "time": 0.65,
+          "concentration_relative_l2": 4.746350242036107e-16,
+          "concentration_max_abs": 8.881784197001252e-16,
+          "vorticity_relative_l2": 3.124408490741039e-15,
+          "vorticity_max_abs": 3.3306690738754696e-14,
+          "velocity_relative_l2": 7.425393120090218e-16
+        }
+      ],
+      "worst_snapshot_relative_l2": {
+        "velocity": 1.1541212372766495e-15,
+        "vorticity": 3.124408490741039e-15,
+        "concentration": 6.20359253672322e-16
+      }
+    },
+    "finer_integration": {
+      "validation": {
+        "validated": true,
+        "completed_steps": 260,
+        "snapshots": 8,
+        "config": {
+          "n": 16,
+          "reynolds": 50.0,
+          "peclet": 50.0,
+          "dt": 0.0025,
+          "final_time": 0.65,
+          "boundary_y": "free-slip",
+          "shear_center": 0.5,
+          "middle_fraction": 0.3,
+          "transition": 0.04,
+          "kh_width": 0.12,
+          "kh_mode": 2,
+          "kh_amplitude": 2.5,
+          "secondary_mode": 1,
+          "secondary_amplitude": 0.5,
+          "phase": 0.0,
+          "velocity_scale": 8.0,
+          "pressure_scale": 4.0,
+          "scalar_scale": 4.0,
+          "boson_cutoff": 12,
+          "predictor_substeps": 16,
+          "correction_substeps": 16,
+          "pressure_cfl": 0.0625,
+          "pressure_tolerance": 1e-08,
+          "pressure_max_steps": 12000
+        },
+        "fingerprint": "6dd46a2dc8fc9e2edec2b7f65e31e2fe9bfd7555fce344a486044086401e5128",
+        "worst_step": {
+          "relative_divergence": 2.278827962236515e-10,
+          "scalar_mass_error": 2.375877272697835e-14,
+          "pressure_mean": 1.46467645448324e-11,
+          "wall_normal_velocity": 0.0,
+          "coherent_eigenstate_defect": 2.2301339805164287e-11,
+          "maximum_ceiling_probability": 4.609575400668252e-21,
+          "maximum_norm_error": 4.440892098500626e-16,
+          "maximum_imaginary_amplitude": 0.0,
+          "pressure_velocity_leakage": 4.283281625084998e-15,
+          "pressure_scalar_leakage": 5.819207474153797e-17,
+          "correction_pressure_leakage": 2.3983430248725917e-10,
+          "correction_scalar_leakage": 3.4325131642225146e-17,
+          "pressure_residual": 9.984903631834278e-09
+        },
+        "total_pressure_iterations": 329480,
+        "final_step": {
+          "step": 260,
+          "time": 0.65,
+          "relative_divergence": 9.027431912419383e-12,
+          "max_divergence": 2.1763540969388373e-10,
+          "scalar_mass_error": 2.2426505097428162e-14,
+          "scalar_mass": 0.4999999999999888,
+          "scalar_minimum": 0.007773331344548453,
+          "scalar_maximum": 0.9932955160879786,
+          "pressure_mean": 1.46420353483414e-11,
+          "wall_normal_velocity": 0.0,
+          "kinetic_energy": 0.3212932080628583,
+          "coherent_eigenstate_defect": 1.1363857445816136e-11,
+          "maximum_ceiling_probability": 5.9607845634433565e-24,
+          "maximum_norm_error": 2.220446049250313e-16,
+          "maximum_imaginary_amplitude": 0.0,
+          "pressure_residual": 9.310118460599005e-09,
+          "pressure_iterations": 1320,
+          "pressure_pseudo_time": 0.322265625,
+          "pressure_velocity_leakage": 2.265781313194307e-17,
+          "pressure_scalar_leakage": 1.1519745461038575e-17,
+          "correction_pressure_leakage": 7.413097238646783e-12,
+          "correction_scalar_leakage": 0.0
+        },
+        "run_metadata": {
+          "elapsed_seconds": 380.8481750958599,
+          "hostname": "htc-n54.crc.pitt.edu",
+          "slurm_job_id": "11215324",
+          "numpy": "1.23.5",
+          "scipy": "1.11.2",
+          "python": "3.9.21",
+          "resumed_from_step": 0,
+          "state_representation": "product of explicit single-site Fock vectors",
+          "local_generator": "f_j a_j^dagger + b_j a_j + c_j I",
+          "pressure_method": "single-site mean-field operator relaxation (RK4)",
+          "mass_projection": false,
+          "coherent_state_reset": false,
+          "tdvp": false,
+          "direct_poisson_solve": false,
+          "operator_counts": {
+            "amplitude_modes": 1040,
+            "predictor": {
+              "linear_monomials": 3664,
+              "quadratic_monomials": 7744
+            },
+            "pressure": {
+              "linear_monomials": 2240,
+              "quadratic_monomials": 0
+            },
+            "correction": {
+              "linear_monomials": 992,
+              "quadratic_monomials": 0
+            }
+          }
+        }
+      },
+      "metrics": [
+        {
+          "time": 0.0,
+          "concentration_relative_l2": 0.0,
+          "concentration_max_abs": 0.0,
+          "vorticity_relative_l2": 0.0,
+          "vorticity_max_abs": 0.0,
+          "velocity_relative_l2": 0.0
+        },
+        {
+          "time": 0.0925,
+          "concentration_relative_l2": 1.1485694064019412e-10,
+          "concentration_max_abs": 5.162066329944537e-10,
+          "vorticity_relative_l2": 4.076748566282106e-10,
+          "vorticity_max_abs": 2.9930177447567985e-08,
+          "velocity_relative_l2": 1.3645436760606983e-10
+        },
+        {
+          "time": 0.185,
+          "concentration_relative_l2": 9.378718051688422e-11,
+          "concentration_max_abs": 3.3893343687196875e-10,
+          "vorticity_relative_l2": 2.407030138677667e-10,
+          "vorticity_max_abs": 1.0083176960051787e-08,
+          "velocity_relative_l2": 8.341395334133455e-11
+        },
+        {
+          "time": 0.2775,
+          "concentration_relative_l2": 7.48837578857189e-11,
+          "concentration_max_abs": 1.9248158622531264e-10,
+          "vorticity_relative_l2": 1.4788808873086422e-10,
+          "vorticity_max_abs": 2.8344082636522216e-09,
+          "velocity_relative_l2": 6.157194462474763e-11
+        },
+        {
+          "time": 0.3725,
+          "concentration_relative_l2": 6.116487821429049e-11,
+          "concentration_max_abs": 9.077544271818283e-11,
+          "vorticity_relative_l2": 1.1711249079304276e-10,
+          "vorticity_max_abs": 1.2146195160767093e-09,
+          "velocity_relative_l2": 5.460039184612744e-11
+        },
+        {
+          "time": 0.465,
+          "concentration_relative_l2": 5.488318121248062e-11,
+          "concentration_max_abs": 8.247624805335363e-11,
+          "vorticity_relative_l2": 1.102254857863595e-10,
+          "vorticity_max_abs": 8.159810604979612e-10,
+          "velocity_relative_l2": 5.1980037559402796e-11
+        },
+        {
+          "time": 0.5575,
+          "concentration_relative_l2": 5.059830901441403e-11,
+          "concentration_max_abs": 7.965961223987961e-11,
+          "vorticity_relative_l2": 1.0204450080825812e-10,
+          "vorticity_max_abs": 5.115596835025826e-10,
+          "velocity_relative_l2": 4.826079042112983e-11
+        },
+        {
+          "time": 0.65,
+          "concentration_relative_l2": 4.7336819849254e-11,
+          "concentration_max_abs": 7.64869279024083e-11,
+          "vorticity_relative_l2": 9.287717804588616e-11,
+          "vorticity_max_abs": 4.609335135796755e-10,
+          "velocity_relative_l2": 4.4816103562491075e-11
+        }
+      ],
+      "worst_snapshot_relative_l2": {
+        "velocity": 1.3645436760606983e-10,
+        "vorticity": 4.076748566282106e-10,
+        "concentration": 1.1485694064019412e-10
+      }
+    }
+  }
+}
