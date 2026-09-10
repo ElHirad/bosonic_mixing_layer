@@ -183,7 +183,8 @@ def plot_grid(data, config, field, destination):
             v = data["v"][k]
             v = .5*(v[1:]+v[:-1]) if v.shape[0] == n+1 else .5*(v+np.roll(v, -1, axis=0))
             coordinates = (np.arange(n)+.5)/n
-            ax.quiver(coordinates[::2], coordinates[::2], u[::2, ::2], v[::2, ::2],
+            stride = max(1, n//8)
+            ax.quiver(coordinates[::stride], coordinates[::stride], u[::stride, ::stride], v[::stride, ::stride],
                       color="black", alpha=.65, scale=17, pivot="mid", width=.004)
         ax.set(title=f"t = {data['times'][k]:.4f}", xlim=(0, 1), ylim=(0, 1), aspect="equal")
         ax.set_xticks([0, .5, 1])

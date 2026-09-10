@@ -2,6 +2,60 @@
 
 ## Current explicit single-site mean-field calculation
 
+### 32×32 thinner-shear preset
+
+```bash
+sbatch --clusters=htc hpc/mean_field32_cpu.sbatch
+```
+
+This preset retains Re=Pe=50, the single free-slip-y layer, and KH amplitudes
+2.5/0.5. It increases the grid to 32×32, reduces tanh thickness from 0.04 to
+0.025, and halves the physical timestep to 0.00125 (520 steps to time 0.65).
+The 32×32 initial advective safety bound is approximately 0.00210, so the
+old physical timestep 0.0025 is not used.
+
+A ten-step HTC preflight took 67 seconds of solver time on one CPU and passed
+every gate. Budget approximately one hour for the full trajectory, depending
+on compute-node performance; the script requests the same `turin` CPU type
+as that preflight, four hours and 2 GiB for headroom and checkpoint/restart.
+An older `cascade_lake` node took 187 seconds for ten resumed steps, about
+three times longer. Override the scheduler constraint if desired, allowing
+for the different runtime. The script auto-resumes a matching checkpoint.
+No dynamical mean-field source changes or relaxed tolerances are needed.
+
+After the complete mean-field result validates, the batch script runs the
+**separate** matched DNS benchmark and generates all plots plus `RUN_REPORT.md`
+under `outputs/mean_field_sites_32x32_re50_pe50_single_freeslip_delta0025`.
+Set `MF_OUTPUT_DIR` to publish elsewhere. `postprocess_status.json` distinguishes
+successful plotting from incomplete or failed post-processing. A partial
+solver trajectory is retained as a checkpoint and is not presented as a final
+result. Both the solver and post-processing sources are frozen in `MF_RUN_DIR`.
+
+The plotting environment needs NumPy, SciPy, Matplotlib and their dependencies
+available on compute nodes. `MF_PLOT_SUPPORT` optionally adds a persistent
+supplemental package directory to `PYTHONPATH` (default
+`cluster_runs/mf-plot-support`). The full plotting import chain and an in-memory
+PNG render are checked on the compute node before the long run. This cluster's
+login and compute nodes have different system plotting dependencies, so the
+supplemental packages are installed in that shared, Git-ignored directory:
+
+```bash
+python3 -m pip install --target cluster_runs/mf-plot-support --only-binary=:all: --no-deps -r hpc/requirements-plot-support.txt
+```
+
+These pins supplement the existing Python 3.9 / NumPy 1.23.5 / SciPy 1.11.2 /
+Matplotlib 3.7.1 installation. They do not replace the solver's numerical
+packages or alter its checkpoint fingerprint. Nothing is downloaded during
+the batch job.
+
+Thinner shear and more cells do not guarantee sharp, sustained pairing at
+Re=50. Inspect the actual vorticity/concentration fields together with mode
+diagnostics. The large seeds test finite-amplitude interaction, and the
+initial transition remains only a few cells wide; this is not a spatially
+converged calculation.
+
+### Original 16×16 preset
+
 Use `mean_field_cpu.sbatch` for the all-stage single-site operator solver:
 
 ```bash

@@ -1,6 +1,7 @@
 """Independent benchmark, matched inputs, comparison metrics, and plot layout."""
 from dataclasses import asdict
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ import mixing_layer_mean_field as mf
 from compare_mean_field_dns import dns_config, run_reference
 from plot_mean_field_results import (comparison, field_coordinates, identical_initial_fields,
                                     load_fields, plot_dns_comparison, plot_dns_diagnostics, verify_dns_setup)
+from postprocess_mean_field_run import postprocess
 
 
 class DNSComparisonTests(unittest.TestCase):
@@ -85,6 +87,23 @@ class DNSComparisonTests(unittest.TestCase):
                 self.assertGreater(destination.stat().st_size, 1000)
             plot_dns_diagnostics(primary, reference, cfg, root/"diagnostics.png")
             self.assertGreater((root/"diagnostics.png").stat().st_size, 1000)
+
+    def test_automatic_postprocessing_creates_validated_report_and_plots(self):
+        cfg = mf.MeanFieldConfig(n=4, kh_amplitude=.2, secondary_amplitude=.03, final_time=.0175)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = mf.run_simulation(cfg, root/"mf")
+            published = root/"published"
+            summary = postprocess(source, published)
+            self.assertTrue(summary["references"]["DNS"]["identical_initial_fields"])
+            self.assertEqual(json.loads((published/"postprocess_status.json").read_text())["state"], "complete")
+            self.assertIn("explicit single-site", (published/"RUN_REPORT.md").read_text())
+            for name in ("mean_field_vorticity.png", "mean_field_concentration.png",
+                         "mean_field_vs_dns_vorticity.png", "mean_field_vs_dns_concentration.png",
+                         "mean_field_vs_dns_diagnostics.png"):
+                self.assertGreater((published/name).stat().st_size, 1000)
+            self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(),
+                             hashlib.sha256((published/"mean_field_snapshots.npz").read_bytes()).hexdigest())
 
 
 if __name__ == "__main__":

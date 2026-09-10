@@ -1,0 +1,270 @@
+{
+  "validation": {
+    "validated": true,
+    "completed_steps": 520,
+    "snapshots": 8,
+    "config": {
+      "n": 32,
+      "reynolds": 50.0,
+      "peclet": 50.0,
+      "dt": 0.00125,
+      "final_time": 0.65,
+      "boundary_y": "free-slip",
+      "shear_center": 0.5,
+      "middle_fraction": 0.3,
+      "transition": 0.025,
+      "kh_width": 0.12,
+      "kh_mode": 2,
+      "kh_amplitude": 2.5,
+      "secondary_mode": 1,
+      "secondary_amplitude": 0.5,
+      "phase": 0.0,
+      "velocity_scale": 8.0,
+      "pressure_scale": 4.0,
+      "scalar_scale": 4.0,
+      "boson_cutoff": 12,
+      "predictor_substeps": 8,
+      "correction_substeps": 8,
+      "pressure_cfl": 0.125,
+      "pressure_tolerance": 1e-08,
+      "pressure_max_steps": 12000
+    },
+    "fingerprint": "54c6077d4217653d8dd78f2e8f550b6206543080aa86f688113eafe60da8a8e6",
+    "worst_step": {
+      "relative_divergence": 8.32331803442533e-11,
+      "scalar_mass_error": 3.7969627442180354e-14,
+      "pressure_mean": 2.3406835543358906e-12,
+      "wall_normal_velocity": 0.0,
+      "coherent_eigenstate_defect": 5.149922525616354e-11,
+      "maximum_ceiling_probability": 2.1598834724340846e-20,
+      "maximum_norm_error": 4.440892098500626e-16,
+      "maximum_imaginary_amplitude": 0.0,
+      "pressure_velocity_leakage": 3.5670357764842615e-14,
+      "pressure_scalar_leakage": 4.8151134782011955e-17,
+      "correction_pressure_leakage": 6.268015702649976e-11,
+      "correction_scalar_leakage": 1.110404005703213e-17,
+      "pressure_residual": 9.999851949591375e-09
+    },
+    "total_pressure_iterations": 1214980,
+    "final_step": {
+      "step": 520,
+      "time": 0.65,
+      "relative_divergence": 2.57689406653646e-12,
+      "max_divergence": 1.2832790385886028e-10,
+      "scalar_mass_error": 4.440892098500626e-15,
+      "scalar_mass": 0.4999999999999978,
+      "scalar_minimum": 0.006135908187838489,
+      "scalar_maximum": 0.9943452937000854,
+      "pressure_mean": 2.3403823223147927e-12,
+      "wall_normal_velocity": 0.0,
+      "kinetic_energy": 0.32389034098290237,
+      "coherent_eigenstate_defect": 3.528218928453781e-11,
+      "maximum_ceiling_probability": 3.1072727336300055e-23,
+      "maximum_norm_error": 2.220446049250313e-16,
+      "maximum_imaginary_amplitude": 0.0,
+      "pressure_residual": 9.787753526237991e-09,
+      "pressure_iterations": 2460,
+      "pressure_pseudo_time": 0.30029296875,
+      "pressure_velocity_leakage": 2.296596638551605e-15,
+      "pressure_scalar_leakage": 3.032067076487564e-17,
+      "correction_pressure_leakage": 1.183944042372554e-12,
+      "correction_scalar_leakage": 0.0
+    },
+    "run_metadata": {
+      "elapsed_seconds": 3453.953503302997,
+      "hostname": "htc-n86.crc.pitt.edu",
+      "slurm_job_id": "11216428",
+      "numpy": "1.23.5",
+      "scipy": "1.11.2",
+      "python": "3.9.21",
+      "resumed_from_step": 28,
+      "state_representation": "product of explicit single-site Fock vectors",
+      "local_generator": "f_j a_j^dagger + b_j a_j + c_j I",
+      "pressure_method": "single-site mean-field operator relaxation (RK4)",
+      "mass_projection": false,
+      "coherent_state_reset": false,
+      "tdvp": false,
+      "direct_poisson_solve": false,
+      "operator_counts": {
+        "amplitude_modes": 4128,
+        "predictor": {
+          "linear_monomials": 15008,
+          "quadratic_monomials": 31872
+        },
+        "pressure": {
+          "linear_monomials": 9088,
+          "quadratic_monomials": 0
+        },
+        "correction": {
+          "linear_monomials": 4032,
+          "quadratic_monomials": 0
+        }
+      }
+    }
+  },
+  "pairing": {
+    "definition": "Fourier amplitudes of y-mean negative-vorticity squared; includes both wall rows",
+    "times": [
+      0.0,
+      0.0925,
+      0.18625,
+      0.27875,
+      0.37125,
+      0.46375,
+      0.5575,
+      0.65
+    ],
+    "primary_mode": [
+      136.36264044707625,
+      52.69957377707541,
+      25.243510258733906,
+      11.618501693365296,
+      4.2389781426668245,
+      0.6210202822676869,
+      0.6932834062926432,
+      0.8189528405778876
+    ],
+    "secondary_mode": [
+      9.589056163634893,
+      4.032318567682064,
+      3.505079411202434,
+      3.9448032671359097,
+      4.484931124742275,
+      4.693314666209043,
+      4.4755034372809455,
+      3.988125480328218
+    ],
+    "ratio": [
+      0.07032025877613088,
+      0.07651520266063601,
+      0.13885071352110093,
+      0.3395277094454077,
+      1.0580217622732813,
+      7.557425739898812,
+      6.455517897383198,
+      4.869786491630005
+    ],
+    "caution": "A ratio crossing one is not by itself evidence of vortex merging; inspect spatial fields."
+  },
+  "concentration_range_all_steps": {
+    "minimum": -0.0200416154008332,
+    "maximum": 1.0245427179474513,
+    "caution": "Centered conservative transport is not bound-preserving; no clipping is applied."
+  },
+  "references": {
+    "DNS": {
+      "file": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_32x32_re50_pe50_single_freeslip_delta0025/dns_matched_snapshots.npz",
+      "metrics": [
+        {
+          "time": 0.0,
+          "concentration_relative_l2": 0.0,
+          "concentration_max_abs": 0.0,
+          "vorticity_relative_l2": 0.0,
+          "vorticity_max_abs": 0.0,
+          "velocity_relative_l2": 0.0
+        },
+        {
+          "time": 0.0925,
+          "concentration_relative_l2": 0.007674532123777891,
+          "concentration_max_abs": 0.035741759892350955,
+          "vorticity_relative_l2": 0.038356365729165676,
+          "vorticity_max_abs": 2.656722482067508,
+          "velocity_relative_l2": 0.013041113325575575
+        },
+        {
+          "time": 0.18625,
+          "concentration_relative_l2": 0.008084933822774455,
+          "concentration_max_abs": 0.03011057033305331,
+          "vorticity_relative_l2": 0.03295830961359772,
+          "vorticity_max_abs": 1.4177255293972735,
+          "velocity_relative_l2": 0.010356544108386065
+        },
+        {
+          "time": 0.27875,
+          "concentration_relative_l2": 0.00710403250758532,
+          "concentration_max_abs": 0.022035379631576424,
+          "vorticity_relative_l2": 0.025519370460328178,
+          "vorticity_max_abs": 0.7362776213364413,
+          "velocity_relative_l2": 0.007666594044857119
+        },
+        {
+          "time": 0.37125,
+          "concentration_relative_l2": 0.005585734881152367,
+          "concentration_max_abs": 0.015035813931274511,
+          "vorticity_relative_l2": 0.019772252804010487,
+          "vorticity_max_abs": 0.4037304713898475,
+          "velocity_relative_l2": 0.006089008017149988
+        },
+        {
+          "time": 0.46375,
+          "concentration_relative_l2": 0.004222906478025494,
+          "concentration_max_abs": 0.010408289053487785,
+          "vorticity_relative_l2": 0.015825471641112972,
+          "vorticity_max_abs": 0.23632572566800825,
+          "velocity_relative_l2": 0.005436994725142271
+        },
+        {
+          "time": 0.5575,
+          "concentration_relative_l2": 0.0034784442813198483,
+          "concentration_max_abs": 0.007372523860553093,
+          "vorticity_relative_l2": 0.013572158971042173,
+          "vorticity_max_abs": 0.15086140424844086,
+          "velocity_relative_l2": 0.005376198760202583
+        },
+        {
+          "time": 0.65,
+          "concentration_relative_l2": 0.00333899753392852,
+          "concentration_max_abs": 0.005853886311071477,
+          "vorticity_relative_l2": 0.0126090550985011,
+          "vorticity_max_abs": 0.10829610911532406,
+          "velocity_relative_l2": 0.005508309780321898
+        }
+      ],
+      "identical_initial_fields": true,
+      "metadata": {
+        "method": "independent DNS: projected midpoint with direct discrete pressure solve",
+        "initialization": "exact measured u, v, concentration from the mean-field t=0 snapshot",
+        "mean_field_source_file": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_32x32_re50_pe50_single_freeslip_delta0025/mean_field_snapshots.npz",
+        "mean_field_fingerprint": "54c6077d4217653d8dd78f2e8f550b6206543080aa86f688113eafe60da8a8e6",
+        "source_sha256": {
+          "compare_mean_field_dns.py": "fa0a5cde2847a87b64a82c9fdd7bf3916ebf9dd0898b86882c96f49ad63211d9",
+          "mixing_layer_dns.py": "3e866ba1a591e3e79fb1439f3cd6c905d845a4d660cf866a364655ded3709439"
+        },
+        "elapsed_seconds": 1.3826387259177864,
+        "hostname": "htc-n86.crc.pitt.edu",
+        "numpy": "1.23.5",
+        "scipy": "1.11.2",
+        "python": "3.9.21",
+        "mass_projection": false,
+        "scalar_clipping": false
+      },
+      "validation": {
+        "validated": true,
+        "completed_steps": 520,
+        "snapshots": 8,
+        "initial": {
+          "relative_divergence": 1.4471259915843282e-16,
+          "max_divergence": 3.197442310920451e-14,
+          "scalar_mass_error": 0.0,
+          "scalar_mass": 0.5,
+          "scalar_minimum": 0.0,
+          "scalar_maximum": 1.0,
+          "wall_normal_velocity": 0.0,
+          "pressure_mean": 0.0
+        },
+        "worst_step": {
+          "relative_divergence": 6.306203205881789e-17,
+          "max_divergence": 1.426636586643326e-14,
+          "scalar_mass_error": 2.220446049250313e-16,
+          "wall_normal_velocity": 0.0,
+          "pressure_mean": 2.7755575615628914e-17
+        },
+        "concentration_range_all_steps": {
+          "minimum": -0.02011545166650426,
+          "maximum": 1.0201154516665045
+        }
+      }
+    }
+  },
+  "convergence": {}
+}

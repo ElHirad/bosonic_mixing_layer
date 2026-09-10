@@ -1,5 +1,28 @@
 # 2-D incompressible mixing-layer solvers
 
+## Completed 32×32 thinner-shear mean-field case
+
+The new cluster preset keeps Re=Pe=50 and the explicit single-site algorithm,
+with a 32×32 grid, tanh thickness **0.025**, and physical timestep **0.00125**.
+It retains KH mode amplitudes 2.5/0.5 and runs 520 steps to time 0.65.
+All 520 steps completed and passed validation. The final Slurm allocation,
+job 11216428, took 59 minutes 12 seconds including DNS comparison and plotting;
+earlier checkpointed work is additional. The original 16×16 results remain unchanged.
+
+```bash
+sbatch --clusters=htc hpc/mean_field32_cpu.sbatch
+```
+
+The batch workflow validates the full single-site result, then produces a
+separate matched DNS comparison and plots automatically. See the completed
+[32×32 report and plots](./outputs/mean_field_sites_32x32_re50_pe50_single_freeslip_delta0025/RUN_REPORT.md),
+[32×32 launch notes](./outputs/mean_field_sites_32x32_re50_pe50_single_freeslip_delta0025/LAUNCH_NOTES.md)
+and [cluster instructions](./hpc/README.md). Final MF/DNS relative L2 differences
+are 0.55% for velocity, 1.26% for vorticity, and 0.33% for concentration.
+The fields show early roll-up followed by broadening and weakening, not a
+clear, strong vortex-pairing event. Transient concentration overshoots remain
+(-0.020 to 1.025); the conservative centered scheme is not bound-preserving.
+
 ## Explicit single-site bosonic mean-field solver (current)
 
 [`mixing_layer_mean_field.py`](./mixing_layer_mean_field.py) replaces TDVP

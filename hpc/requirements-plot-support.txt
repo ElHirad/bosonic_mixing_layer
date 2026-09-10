@@ -1,0 +1,12 @@
+# Supplemental plotting dependencies for the cluster's existing Python 3.9
+# NumPy 1.23.5 / SciPy 1.11.2 / Matplotlib 3.7.1 installation.
+# Deliberately does not replace the numerical packages used by checkpoints.
+packaging==23.2
+cycler==0.12.1
+fonttools==4.53.1
+kiwisolver==1.4.5
+pillow==10.4.0
+pyparsing==3.1.4
+python-dateutil==2.9.0.post0
+six==1.16.0
+zipp==3.23.1
