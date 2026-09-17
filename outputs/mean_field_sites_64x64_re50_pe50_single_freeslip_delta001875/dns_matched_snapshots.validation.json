@@ -1,0 +1,67 @@
+{
+  "validated": true,
+  "completed_steps": 1040,
+  "snapshots": 8,
+  "initial": {
+    "relative_divergence": 1.4315223072678227e-16,
+    "max_divergence": 1.1368683772161603e-13,
+    "scalar_mass_error": 0.0,
+    "scalar_mass": 0.5,
+    "scalar_minimum": 0.0,
+    "scalar_maximum": 1.0,
+    "wall_normal_velocity": 0.0,
+    "pressure_mean": 0.0
+  },
+  "worst_step": {
+    "relative_divergence": 6.10291161682445e-17,
+    "max_divergence": 4.263256414560601e-14,
+    "scalar_mass_error": 2.220446049250313e-16,
+    "wall_normal_velocity": 0.0,
+    "pressure_mean": 4.163336342344337e-17
+  },
+  "concentration_range_all_steps": {
+    "minimum": 0.0,
+    "maximum": 1.0
+  },
+  "config": {
+    "nx": 64,
+    "ny": 64,
+    "dx": 0.015625,
+    "dy": 0.015625,
+    "reynolds": 50.0,
+    "peclet": 50.0,
+    "reference_velocity": 1.0,
+    "boundary_y": "free-slip",
+    "shear_center_fraction": 0.5,
+    "middle_layer_fraction": 0.3,
+    "transition_thickness": 0.01875,
+    "perturbation_width": 0.12,
+    "perturbation_mode": 2,
+    "perturbation_amplitude": 2.5,
+    "subharmonic_mode": 1,
+    "subharmonic_amplitude": 0.5,
+    "perturbation_phase": 0.0,
+    "cfl": 0.35,
+    "diffusion_safety": 0.8,
+    "max_dt": 0.000625,
+    "t_end": 0.65,
+    "n_snapshots": 8
+  },
+  "metadata": {
+    "method": "independent DNS: projected midpoint with direct discrete pressure solve",
+    "initialization": "exact measured u, v, concentration from the mean-field t=0 snapshot",
+    "mean_field_source_file": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re50_pe50_single_freeslip_delta001875/mean_field_snapshots.npz",
+    "mean_field_fingerprint": "7867e700d9f144d4b5233c97b5575b851ed036fad1e02906d389b909c2018ee7",
+    "source_sha256": {
+      "compare_mean_field_dns.py": "fa0a5cde2847a87b64a82c9fdd7bf3916ebf9dd0898b86882c96f49ad63211d9",
+      "mixing_layer_dns.py": "3e866ba1a591e3e79fb1439f3cd6c905d845a4d660cf866a364655ded3709439"
+    },
+    "elapsed_seconds": 6.053521837107837,
+    "hostname": "htc-n86.crc.pitt.edu",
+    "numpy": "1.23.5",
+    "scipy": "1.11.2",
+    "python": "3.9.21",
+    "mass_projection": false,
+    "scalar_clipping": false
+  }
+}

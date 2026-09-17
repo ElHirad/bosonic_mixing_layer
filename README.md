@@ -1,5 +1,54 @@
 # 2-D incompressible mixing-layer solvers
 
+## Completed 64×64 higher-Re/Pe run
+
+The higher-Re/Pe case uses **Re=Pe=200**, reducing viscosity and scalar diffusivity
+from 0.02 to 0.005. Grid size (64×64), shear thickness (0.01875), timestep
+(0.000625), KH seeds, and all single-site bosonic integration settings are
+unchanged. It completed 1,040 steps to time 0.65 in a separate directory, preserving
+the completed Re=Pe=50 results.
+
+```bash
+sbatch --clusters=htc --export=ALL,MF_REYNOLDS=200,MF_PECLET=200 hpc/mean_field64_cpu.sbatch
+```
+
+Job **11244737** completed the trajectory, validation, separate matched DNS
+comparison, and plotting in **24 hours 36 minutes** (earlier preflight work is
+additional). The mean-field fields show clear spiral roll-up and stronger
+vortex-pair rotation than at Re=Pe=50. Two distinct cores remain at t=0.65,
+so a completed merger is not demonstrated.
+
+Final MF/DNS relative L2 differences are **4.58% for velocity, 11.71% for
+vorticity, and 2.63% for concentration**. These larger discrepancies warrant
+a timestep-convergence study before claiming quantitative accuracy. All-step
+concentration spans [-0.059699, 1.0625]: centered transport is not bound-preserving,
+and no clipping or mass repair is used. Passing the numerical gates does not
+establish grid or timestep convergence. See the
+[completed report and plots](./outputs/mean_field_sites_64x64_re200_pe200_single_freeslip_delta001875/RUN_REPORT.md),
+[concentration roll-up](./outputs/mean_field_sites_64x64_re200_pe200_single_freeslip_delta001875/mean_field_concentration.png),
+and [launch history and archived DNS preview](./outputs/mean_field_sites_64x64_re200_pe200_single_freeslip_delta001875/LAUNCH_NOTES.md).
+
+## Completed 64×64 Re=Pe=50 run
+
+The new preset uses a 64×64 grid, tanh thickness **0.01875** (25% thinner
+than the 32×32 case), and timestep **0.000625**: 1,040 steps to time 0.65.
+Re=Pe=50 and the KH seeds remain unchanged by default. All dynamical stages
+continue to evolve explicit single-site bosonic states. The original 16×16
+and 32×32 results are preserved.
+
+```bash
+sbatch --clusters=htc hpc/mean_field64_cpu.sbatch
+```
+
+Job **11217985** completed all 1,040 steps, validation, DNS comparison, and
+plotting in **26 hours 2 minutes** (earlier preflight work is additional).
+Final MF/DNS relative L2 differences are 0.30% for velocity, 0.68% for vorticity,
+and 0.17% for concentration. The fields show roll-up followed by broadening,
+not strong clean pairing. See the
+[completed 64×64 report and plots](./outputs/mean_field_sites_64x64_re50_pe50_single_freeslip_delta001875/RUN_REPORT.md),
+[launch history](./outputs/mean_field_sites_64x64_re50_pe50_single_freeslip_delta001875/LAUNCH_NOTES.md),
+and [cluster instructions](./hpc/README.md).
+
 ## Completed 32×32 thinner-shear mean-field case
 
 The new cluster preset keeps Re=Pe=50 and the explicit single-site algorithm,

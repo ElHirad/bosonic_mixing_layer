@@ -1,0 +1,6 @@
+{
+  "state": "complete",
+  "mean_field_source": "/ix/jmendoza-arenas/hia21/mixing-layer/mean-field-sites64-re50-pe50-single-freeslip-delta001875-largekh-nb12/mean_field_snapshots.npz",
+  "completed_steps": 1040,
+  "report": "RUN_REPORT.md"
+}

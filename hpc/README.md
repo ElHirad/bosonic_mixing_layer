@@ -2,6 +2,82 @@
 
 ## Current explicit single-site mean-field calculation
 
+### 64×64 thinner-shear preset
+
+The completed Re=Pe=50 job 11217985 took 26 hours 2 minutes including its
+automatic DNS comparison and plotting. The completed **Re=Pe=200** case keeps its
+grid, thickness, timestep, KH seeds, cutoff, and all integration/gate settings:
+
+```bash
+sbatch --clusters=htc --export=ALL,MF_REYNOLDS=200,MF_PECLET=200 hpc/mean_field64_cpu.sbatch
+```
+
+Both viscosity and scalar diffusivity decrease from 0.02 to 0.005. Default
+run/output paths include `re200-pe200` / `re200_pe200`, so completed Re=Pe=50
+data are preserved. If you have exported `MF_RUN_DIR` or `MF_OUTPUT_DIR`,
+override those too: never reuse a directory for changed physical parameters.
+The same automatic validation and separate matched DNS/plotting pipeline is
+used. Job **11244737** completed all 1,040 steps and post-processing in
+**24 hours 36 minutes**, excluding its earlier three-step preflight. See the
+[completed higher-Re/Pe report](../outputs/mean_field_sites_64x64_re200_pe200_single_freeslip_delta001875/RUN_REPORT.md)
+and [launch history](../outputs/mean_field_sites_64x64_re200_pe200_single_freeslip_delta001875/LAUNCH_NOTES.md).
+Roll-up and mutual vortex rotation are clearer, but two cores remain at t=0.65.
+Final vorticity differs from the matched DNS by 11.71% in relative L2; passing
+the acceptance gates does not establish quantitative or convergence accuracy.
+The archived DNS preview is not a mean-field result.
+
+For the original Re=Pe=50 configuration:
+
+```bash
+# Three-step timing and numerical preflight; saves resumable local kets.
+sbatch --clusters=htc --job-name=mf64_preflight --time=01:00:00 --signal=B:USR1@600 hpc/mean_field64_cpu.sbatch --max-steps 3 --checkpoint-interval 1
+# Continue the same configuration after the preflight has finished and passed.
+sbatch --clusters=htc hpc/mean_field64_cpu.sbatch
+```
+
+The 64×64 preset keeps Re=Pe=50, one free-slip/no-flux-y shear layer, and KH
+amplitudes 2.5/0.5 with width 0.12. Tanh thickness is 0.01875, reduced from
+0.025. The initial concentration 10–90% transition spans about 2.64 cells
+(previously 1.76); it remains a thin, not demonstrably converged profile.
+The physical timestep is halved to 0.000625 (1,040 steps to time 0.65), below
+the initial advective bound of approximately 0.001032.
+
+There are 16,448 local Fock vectors, each of dimension 13. The pressure
+pseudo-step remains 0.125/64² and its residual tolerance remains 1e-8. Only
+the maximum allowed pressure iterations increase from 12,000 to 48,000 to
+allow for the finer grid's slower relaxation. Eight RK4 subdivisions are
+retained in both predictor and correction. No solver equations, dynamical
+source files, acceptance tolerances, or scalar corrections are changed.
+
+The script requests one `turin` CPU, 4 GiB, and 48 hours, with a checkpoint
+stop signal 15 minutes before the limit. The allocation is headroom, not a
+measured runtime prediction. The raw scaling estimate is around 32 times
+the 32×32 runtime (four times the cells, about four times the pressure
+iterations per step, and twice the physical steps); use the cluster preflight
+for an actual estimate. Checkpoints are saved every five accepted steps.
+
+Preflight job 11217973 passed three steps in about 310 seconds of stepping
+time on `htc-n86`; warm steps took 88–89 seconds and `/usr/bin/time` recorded
+about 118 MiB maximum resident memory. This suggested about 25–30 hours for
+the full trajectory. Production job 11217985 resumed at step 3 and completed
+in 26 hours 2 minutes. All 42 Python tests pass. Preflight measurements are
+startup checks; the [completed Re=Pe=50 report](../outputs/mean_field_sites_64x64_re50_pe50_single_freeslip_delta001875/RUN_REPORT.md)
+links the full-trajectory validation and independent DNS comparison.
+
+This wrapper reuses the tested 32×32 batch workflow for environment checks,
+frozen sources, restart, validation, and automatic independent DNS comparison
+and plotting; its final CLI arguments select the actual 64×64 configuration.
+Results go to `outputs/mean_field_sites_64x64_re50_pe50_single_freeslip_delta001875`.
+`MF_RUN_DIR` and `MF_OUTPUT_DIR` can override the default directories.
+Optional `MF_REYNOLDS` and `MF_PECLET` select a different physical case and
+separate default paths; Pe defaults to Re when only Re is supplied. Do not
+reuse a run directory for changed parameters. Changing Re/Pe is a separate
+physics choice, not a requirement for increasing the grid size.
+
+Re=Pe=50 remains strongly damped in the preceding calculation. More cells and
+thinner initial shear do not establish better roll-up or pairing by themselves;
+inspect the completed spatial fields rather than just the Fourier-mode ratio.
+
 ### 32×32 thinner-shear preset
 
 ```bash
