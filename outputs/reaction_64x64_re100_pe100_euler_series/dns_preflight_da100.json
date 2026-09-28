@@ -1,0 +1,93 @@
+{
+  "kind": "independent DNS preflight only, not a mean-field result",
+  "completed_steps": 1040,
+  "config": {
+    "n": 64,
+    "reynolds": 100.0,
+    "peclet": 100.0,
+    "dt": 0.000625,
+    "final_time": 0.65,
+    "boundary_y": "free-slip",
+    "shear_center": 0.5,
+    "middle_fraction": 0.3,
+    "transition": 0.01875,
+    "kh_width": 0.12,
+    "kh_mode": 2,
+    "kh_amplitude": 2.5,
+    "secondary_mode": 1,
+    "secondary_amplitude": 0.5,
+    "phase": 0.0,
+    "velocity_scale": 8.0,
+    "pressure_scale": 4.0,
+    "scalar_scale": 4.0,
+    "boson_cutoff": 12,
+    "predictor_substeps": 8,
+    "correction_substeps": 8,
+    "pressure_cfl": 0.125,
+    "pressure_tolerance": 1e-08,
+    "pressure_max_steps": 48000,
+    "scalar_species": 3,
+    "damkohler": 100.0,
+    "time_integrator": "forward-euler"
+  },
+  "mean_field_source_fingerprint": "4206f2016a13d0d53da15ee2ba82e7a31cdb95783b1ab556a9296d8b60de857a",
+  "dns_time_integrator": "forward-euler",
+  "source_sha256": {
+    "reaction_dns_preflight.py": "c1a180ccea61f0468cb5ab8b5e74d92db5ccc62ceba17804337bd5feccdaf181",
+    "reacting_dns.py": "3f496e8587f553dbd13d29bf4de3e9026c0e4f99ec7c3fd319bccb6ca1ac8c61",
+    "mixing_layer_dns.py": "3e866ba1a591e3e79fb1439f3cd6c905d845a4d660cf866a364655ded3709439",
+    "compare_mean_field_dns.py": "aa2bf47024529eb92b826f41ebc1aeb05d74a64daa911174effd1dd7e7da4cc2",
+    "mixing_layer_mean_field.py": "58992e17dc546603d66659773db62af71f666044eb1c9875a63bbcced31831d1",
+    "mean_field_operators.py": "8154e0995e5bdfd470e328952742702d91c060f9783b4b377e8bad2cdedb3fce",
+    "mean_field_bosons.py": "69a11b6d78da90ad4fa3ce3d9fd5b8d41cff43996788d9d17e6162814f8d9c63"
+  },
+  "conservation_and_divergence_checks_passed": true,
+  "positivity_preserved": false,
+  "species_ranges_all_steps": {
+    "c1": {
+      "minimum": -0.008704077520925778,
+      "maximum": 1.0262173596287856
+    },
+    "c2": {
+      "minimum": -0.008704077520925786,
+      "maximum": 1.0262173596287856
+    },
+    "c3": {
+      "minimum": -0.01284678682357232,
+      "maximum": 0.45893498844104685
+    }
+  },
+  "minimum_reaction_rate": -0.819730535425439,
+  "maximum_negative_rate_fraction": 0.01123046875,
+  "first_negative_step": 16,
+  "worst_invariant_error": 2.220446049250313e-16,
+  "worst_relative_divergence": 1.4315223072678227e-16,
+  "final": {
+    "relative_divergence": 5.468154540363325e-17,
+    "max_divergence": 1.532107773982716e-14,
+    "scalar_mass_error": 0.0,
+    "scalar_mass": 0.26783700608135325,
+    "scalar_minimum": 2.1237897707257007e-17,
+    "scalar_maximum": 0.9996135249286991,
+    "invariant_13_mass": 0.5,
+    "invariant_13_error": 0.0,
+    "invariant_23_mass": 0.5,
+    "invariant_23_error": 0.0,
+    "c1_mass": 0.3035110182440597,
+    "c1_minimum": 2.1237897707257044e-17,
+    "c1_maximum": 0.9996135249286991,
+    "c2_mass": 0.3035110182440596,
+    "c2_minimum": 2.1237897707257007e-17,
+    "c2_maximum": 0.999613524928699,
+    "c3_mass": 0.19648898175594037,
+    "c3_minimum": 0.00019323753565049308,
+    "c3_maximum": 0.45893498844104685,
+    "reaction_rate_mean": 0.060469291479013705,
+    "reaction_rate_minimum": 2.1228528010790336e-15,
+    "reaction_negative_rate_fraction": 0.0,
+    "wall_normal_velocity": 0.0,
+    "pressure_mean": 3.469446951953614e-18
+  },
+  "scalar_clipping": false,
+  "mass_repair": false
+}

@@ -1,0 +1,288 @@
+{
+  "sources": [
+    {
+      "damkohler": 1,
+      "config": {
+        "n": 64,
+        "reynolds": 100.0,
+        "peclet": 100.0,
+        "dt": 0.000625,
+        "final_time": 0.65,
+        "boundary_y": "free-slip",
+        "shear_center": 0.5,
+        "middle_fraction": 0.3,
+        "transition": 0.01875,
+        "kh_width": 0.12,
+        "kh_mode": 2,
+        "kh_amplitude": 2.5,
+        "secondary_mode": 1,
+        "secondary_amplitude": 0.5,
+        "phase": 0.0,
+        "velocity_scale": 8.0,
+        "pressure_scale": 4.0,
+        "scalar_scale": 4.0,
+        "boson_cutoff": 12,
+        "predictor_substeps": 8,
+        "correction_substeps": 8,
+        "pressure_cfl": 0.125,
+        "pressure_tolerance": 1e-07,
+        "pressure_max_steps": 48000,
+        "scalar_species": 3,
+        "damkohler": 1.0,
+        "time_integrator": "rk4"
+      },
+      "mf_fingerprint": "1066c54726b361ccf9cef6a8fd8c98e0c5f0e445fc2ea477a29a59782d7857e6",
+      "files": {
+        "MF": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da1_reaction_rk4_ptol1e7/mean_field_snapshots.npz",
+          "sha256": "7d4ebc27da57bbebd2b41f2a5a45bd3e1e39af5e1ea7165200c2f4a79c34acee"
+        },
+        "DNS": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da1_reaction_rk4_ptol1e7/dns_matched_snapshots.npz",
+          "sha256": "649c7477fc2d39542722d5c910f620ec41a13213e07ab301a3dca61356afe126"
+        }
+      },
+      "mf_validation_recomputed": true,
+      "dns_snapshot_diagnostics_recomputed": true
+    },
+    {
+      "damkohler": 10,
+      "config": {
+        "n": 64,
+        "reynolds": 100.0,
+        "peclet": 100.0,
+        "dt": 0.000625,
+        "final_time": 0.65,
+        "boundary_y": "free-slip",
+        "shear_center": 0.5,
+        "middle_fraction": 0.3,
+        "transition": 0.01875,
+        "kh_width": 0.12,
+        "kh_mode": 2,
+        "kh_amplitude": 2.5,
+        "secondary_mode": 1,
+        "secondary_amplitude": 0.5,
+        "phase": 0.0,
+        "velocity_scale": 8.0,
+        "pressure_scale": 4.0,
+        "scalar_scale": 4.0,
+        "boson_cutoff": 12,
+        "predictor_substeps": 8,
+        "correction_substeps": 8,
+        "pressure_cfl": 0.125,
+        "pressure_tolerance": 1e-07,
+        "pressure_max_steps": 48000,
+        "scalar_species": 3,
+        "damkohler": 10.0,
+        "time_integrator": "rk4"
+      },
+      "mf_fingerprint": "ff04e6123b16f5c42fe4fd15466110ed6d2f0aa6c046e11579d327fc059b0a14",
+      "files": {
+        "MF": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da10_reaction_rk4_ptol1e7/mean_field_snapshots.npz",
+          "sha256": "6503570e6c5af9549b807485ad4cdba9500c4f3b19f839035cb86ac66f42dc59"
+        },
+        "DNS": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da10_reaction_rk4_ptol1e7/dns_matched_snapshots.npz",
+          "sha256": "8ebf5aaf8f54f7c205fdef69cbb80a606e9a3f491b5418dc7205f383885d67b0"
+        }
+      },
+      "mf_validation_recomputed": true,
+      "dns_snapshot_diagnostics_recomputed": true
+    },
+    {
+      "damkohler": 100,
+      "config": {
+        "n": 64,
+        "reynolds": 100.0,
+        "peclet": 100.0,
+        "dt": 0.000625,
+        "final_time": 0.65,
+        "boundary_y": "free-slip",
+        "shear_center": 0.5,
+        "middle_fraction": 0.3,
+        "transition": 0.01875,
+        "kh_width": 0.12,
+        "kh_mode": 2,
+        "kh_amplitude": 2.5,
+        "secondary_mode": 1,
+        "secondary_amplitude": 0.5,
+        "phase": 0.0,
+        "velocity_scale": 8.0,
+        "pressure_scale": 4.0,
+        "scalar_scale": 4.0,
+        "boson_cutoff": 12,
+        "predictor_substeps": 8,
+        "correction_substeps": 8,
+        "pressure_cfl": 0.125,
+        "pressure_tolerance": 1e-07,
+        "pressure_max_steps": 48000,
+        "scalar_species": 3,
+        "damkohler": 100.0,
+        "time_integrator": "rk4"
+      },
+      "mf_fingerprint": "90c632ffccf8230dc008eac26dbc7a6e3b4b4909e766a71f4b12a85555ead0c8",
+      "files": {
+        "MF": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da100_reaction_rk4_ptol1e7/mean_field_snapshots.npz",
+          "sha256": "6e89c9c0746e318e883513fb4763bb97ea04b1cf9a5398ef905ec4d296a94009"
+        },
+        "DNS": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da100_reaction_rk4_ptol1e7/dns_matched_snapshots.npz",
+          "sha256": "d950b8116b3c38f0cc21e314070648b78f494ec1418819d1fd2ee2f059c9037f"
+        }
+      },
+      "mf_validation_recomputed": true,
+      "dns_snapshot_diagnostics_recomputed": true
+    }
+  ],
+  "times": [
+    0.0,
+    0.093125,
+    0.185625,
+    0.27875,
+    0.37125,
+    0.464375,
+    0.556875,
+    0.65
+  ],
+  "snapshot_count_per_method_case": 8,
+  "line_styles": {
+    "DNS": "-",
+    "MF": "--"
+  },
+  "final_comparisons": {
+    "1": {
+      "R11": {
+        "final_DNS": 0.02921529680466767,
+        "final_MF": 0.027414776886148323,
+        "final_relative_difference_percent": 6.162935569532472,
+        "maximum_snapshot_absolute_difference": 0.0029675654131904733
+      },
+      "R22": {
+        "final_DNS": 0.08963249490490424,
+        "final_MF": 0.08422511445324535,
+        "final_relative_difference_percent": 6.0328349192955795,
+        "maximum_snapshot_absolute_difference": 0.006081368289254541
+      },
+      "R12": {
+        "final_DNS": -0.008473930470975163,
+        "final_MF": -0.00691552622433915,
+        "final_relative_difference_percent": 18.39057155323432,
+        "maximum_snapshot_absolute_difference": 0.0019813011068962032
+      },
+      "vorticity_thickness": {
+        "final_DNS": 0.3769763854166643,
+        "final_MF": 0.3776475575241794,
+        "final_relative_difference_percent": 0.17804088889368302,
+        "maximum_snapshot_absolute_difference": 0.004903911325236737
+      },
+      "covariance_global": {
+        "final_DNS": -0.11937418115360393,
+        "final_MF": -0.11890008755518845,
+        "final_relative_difference_percent": 0.3971491941003909,
+        "maximum_snapshot_absolute_difference": 0.0006667255429428365
+      },
+      "covariance_streamwise": {
+        "final_DNS": -0.012897619263301716,
+        "final_MF": -0.012659341233324559,
+        "final_relative_difference_percent": 1.847457465697897,
+        "maximum_snapshot_absolute_difference": 0.0009510253384321585
+      }
+    },
+    "10": {
+      "R11": {
+        "final_DNS": 0.02921529680466767,
+        "final_MF": 0.02741477688614978,
+        "final_relative_difference_percent": 6.162935569527485,
+        "maximum_snapshot_absolute_difference": 0.002967565413188211
+      },
+      "R22": {
+        "final_DNS": 0.08963249490490424,
+        "final_MF": 0.0842251144532506,
+        "final_relative_difference_percent": 6.032834919289727,
+        "maximum_snapshot_absolute_difference": 0.006081368289251876
+      },
+      "R12": {
+        "final_DNS": -0.008473930470975163,
+        "final_MF": -0.006915526224339566,
+        "final_relative_difference_percent": 18.390571553229407,
+        "maximum_snapshot_absolute_difference": 0.001981301106895393
+      },
+      "vorticity_thickness": {
+        "final_DNS": 0.3769763854166643,
+        "final_MF": 0.3776475575241799,
+        "final_relative_difference_percent": 0.17804088889381556,
+        "maximum_snapshot_absolute_difference": 0.004903911325240012
+      },
+      "covariance_global": {
+        "final_DNS": -0.10438029265538759,
+        "final_MF": -0.10396050352518368,
+        "final_relative_difference_percent": 0.40217278523048816,
+        "maximum_snapshot_absolute_difference": 0.0006262445946097206
+      },
+      "covariance_streamwise": {
+        "final_DNS": -0.008612543417806196,
+        "final_MF": -0.008420347886577964,
+        "final_relative_difference_percent": 2.23157692106229,
+        "maximum_snapshot_absolute_difference": 0.0009370782528841035
+      }
+    },
+    "100": {
+      "R11": {
+        "final_DNS": 0.02921529680466767,
+        "final_MF": 0.027414776886149336,
+        "final_relative_difference_percent": 6.1629355695290045,
+        "maximum_snapshot_absolute_difference": 0.0029675654131858797
+      },
+      "R22": {
+        "final_DNS": 0.08963249490490424,
+        "final_MF": 0.08422511445324915,
+        "final_relative_difference_percent": 6.032834919291337,
+        "maximum_snapshot_absolute_difference": 0.006081368289244715
+      },
+      "R12": {
+        "final_DNS": -0.008473930470975163,
+        "final_MF": -0.006915526224339763,
+        "final_relative_difference_percent": 18.39057155322708,
+        "maximum_snapshot_absolute_difference": 0.0019813011068951936
+      },
+      "vorticity_thickness": {
+        "final_DNS": 0.3769763854166643,
+        "final_MF": 0.37764755752418305,
+        "final_relative_difference_percent": 0.17804088889465491,
+        "maximum_snapshot_absolute_difference": 0.00490391132523979
+      },
+      "covariance_global": {
+        "final_DNS": -0.09162018234646067,
+        "final_MF": -0.09115030766823112,
+        "final_relative_difference_percent": 0.5128506254797935,
+        "maximum_snapshot_absolute_difference": 0.0008698300632697109
+      },
+      "covariance_streamwise": {
+        "final_DNS": -0.004292538656037103,
+        "final_MF": -0.00413381088701425,
+        "final_relative_difference_percent": 3.697759804669799,
+        "maximum_snapshot_absolute_difference": 0.0009458879563349204
+      }
+    }
+  },
+  "maximum_spread_across_Da": {
+    "DNS": {
+      "R11": 0.0,
+      "R22": 0.0,
+      "R12": 0.0,
+      "vorticity_thickness": 0.0
+    },
+    "MF": {
+      "R11": 5.037636974236648e-15,
+      "R22": 9.825473767932635e-15,
+      "R12": 1.8145207558717402e-15,
+      "vorticity_thickness": 9.658940314238862e-15
+    }
+  },
+  "thickness_definition_source": "https://www.cambridge.org/core/journals/journal-of-fluid-mechanics/article/variabledensity-effects-in-incompressible-nonbuoyant-sheardriven-turbulent-mixing-layers/250CE5A774864C97D4C73FB0742C2797",
+  "postprocessor_sha256": "dd943923423df5ba07f9c2c2b959e2d7a89f74fceda7a3e064ee0da6c92d496a",
+  "scalar_clipping": false,
+  "simulation_rerun": false
+}

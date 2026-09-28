@@ -2,6 +2,151 @@
 
 ## Current explicit single-site mean-field calculation
 
+### 64×64 reacting RK4 with signed concentrations
+
+The current preset `mean_field64_reaction_rk4_cpu.sbatch` uses n=64,
+Re=Pe=100, Da=1,10,100, dt=0.000625, T=0.65 (1,040 steps), thickness 0.01875,
+the same KH seeds and boundaries, cutoff 12, eight RK4 subdivisions per
+predictor/correction, pressure CFL 0.125, cap 48,000, and the approved pressure
+tolerance **1e-7**. All other acceptance gates remain unchanged. MF evolves
+explicit local Fock kets throughout; no classical pressure solve enters it.
+
+The reacting DNS also uses genuine four-stage RK4. The older nonreacting
+RK4 cases retain their labelled historical midpoint benchmark. RK4 inside
+the MF splitting does not establish global fourth-order MF accuracy.
+
+`mean_field64_reaction_rk4_preflight.sbatch` runs full-time independent DNS
+screening and requires **ten accepted MF steps** for one Da. It requests one
+Turin CPU, 4 GiB, and six hours. Submit three jobs with `MF_DAMKOHLER=1,10,100`,
+and set `DNS_PREFLIGHT_OUTPUT` to the new series directory. DNS writes both
+summary JSON and per-step signed-species CSV. New RK4 directories preserve
+all previous results/checkpoints.
+
+The full preset uses the same per-case run directory with
+`--dependency=afterok:TEST1:TEST10:TEST100 --kill-on-invalid-dep=yes`.
+Full jobs resume the ten-step checkpoints only if all tests pass. Each requests
+one Turin CPU, 4 GiB, and three days, with per-step checkpoints and an early
+stop signal. Final validation triggers matched full DNS, c1/c2/c3 and flow
+plots, `concentration_sign_history.csv`, `concentration_signs.png`, and
+`RUN_REPORT.md`. No automatic wall-limit resubmission is enabled. Frozen
+sources are required for restart; the new diagnostics change the fingerprint.
+See [current status](../outputs/reaction_64x64_re100_pe100_rk4_series/STATUS.md).
+All three production cases and matched DNS comparisons have completed. The
+[combined statistics report](../outputs/reaction_64x64_re100_pe100_rk4_series/statistics/README.md)
+links the Reynolds-stress, vorticity-thickness, and signed-unmixedness figures.
+`plot_reaction_statistics.py` reproduces these figures from validated existing
+snapshots; it does not submit jobs or rerun either solver.
+
+The 128×128 workflows below are historical. All three 1e-7 tests failed
+the coherence gate at step 2, cancelling their conditional full jobs.
+
+### 128×128 pressure tolerance 1e-7 validation
+
+The initial 128×128 full runs failed during step 2, all at residual
+1.545023e-8 after 192,000 pressure iterations. The user approved changing
+only the pressure tolerance from 1e-8 to **1e-7**, and requested short
+multi-step validation before full mean-field/DNS comparisons.
+
+`mean_field128_reaction_ptol1e7_cpu.sbatch` wraps the original production
+preset with that single parameter change and distinct `-ptol1e7` scratch /
+`_ptol1e7` publication paths. It retains Re=Pe=200, n=128, dt=0.0003125,
+t=0.65, shear thickness 0.01875, all operator evolution, eight forward-Euler
+subdivisions, pressure CFL 0.125, cutoff 12, and every other acceptance gate.
+The core solver files are unchanged. Old results/checkpoints are preserved;
+the changed configuration must start afresh, not bypass checkpoint fingerprints.
+
+`mean_field128_reaction_preflight.sbatch` attempts **five consecutive steps**
+per Da with the same production solver. Each test requests one Turin CPU,
+4 GiB, and six hours. Its final guard requires five accepted checkpointed
+steps and the matching configuration. A graceful early stop, failure, or
+short checkpoint does not count as a passed test. The shared workflow skips
+DNS/plots for these partial trajectories.
+
+Submit the three preflights separately with `MF_DAMKOHLER=1,10,100`. Then
+submit the three full `mean_field128_reaction_ptol1e7_cpu.sbatch` jobs with
+the same per-case run/output directories, frozen `PROJECT_ROOT`, and
+`--dependency=afterok:TEST1:TEST10:TEST100 --kill-on-invalid-dep=yes`.
+All three tests must pass before any full job can start. A failed test makes
+the production dependency invalid, so Slurm cancels those waiting jobs.
+Successful production resumes each case's five-step checkpoint, validates
+the full trajectory, and runs its separate matched forward-Euler DNS and
+c1/c2/c3 comparisons. Each full job retains the 21-day allocation limit and
+per-step checkpointing; no automatic wall-limit resubmission is enabled.
+
+Only the pressure stopping criterion is relaxed. The known Da=100
+coherent-eigenstate defect remains a separate possible blocker. No promise
+of a passing trajectory follows from changing the pressure tolerance.
+See [launch and validation status](../outputs/reaction_128x128_re200_pe200_euler_ptol1e7_series/STATUS.md).
+
+### 128×128 reaction: DNS screening and pressure diagnostics
+
+The preceding request used 128×128, Re=Pe=200, dt=0.0003125, with forward Euler
+and the existing thickness 0.01875. The full-time DNS checks for Da=1,10,100
+completed with negatives smaller than the accepted 64×64/Re=Pe=100 baseline.
+Separate pressure probes use `reaction128_euler_probe.sbatch --damkohler DA`.
+These attempt one physical mean-field step, not a production trajectory.
+Each requests one Turin CPU, 4 GiB, and up to two hours. Its 192,000-iteration
+cap preserves the previous maximum pressure pseudo-time at the finer grid;
+the 1e-8 residual tolerance is unchanged. See
+[screening and probe status](../outputs/reaction_128x128_re200_pe200_euler_series/STATUS.md).
+
+### 128×128 full reacting mean-field trajectories
+
+All three startup probes passed every gate. Each pressure solve reached
+9.9906e-9 in 51,480 iterations. `mean_field128_reaction_cpu.sbatch` now runs
+the full 2,080-step trajectory to t=0.65 for one specified Da, using exactly
+the probe configuration and unchanged solver sources and tolerances:
+
+```bash
+sbatch --clusters=htc --job-name=mf128_euler_da1 --export=ALL,MF_DAMKOHLER=1 hpc/mean_field128_reaction_cpu.sbatch
+sbatch --clusters=htc --job-name=mf128_euler_da10 --export=ALL,MF_DAMKOHLER=10 hpc/mean_field128_reaction_cpu.sbatch
+sbatch --clusters=htc --job-name=mf128_euler_da100 --export=ALL,MF_DAMKOHLER=100 hpc/mean_field128_reaction_cpu.sbatch
+```
+
+Each case has its own scratch directory and publication directory, including
+its Da. The preset fixes cutoff 12, eight predictor/correction subdivisions,
+and pressure CFL 0.125 even if an older preset exported different values.
+All stages retain explicit local Fock kets and forward Euler. The separate
+DNS comparison and c1/c2/c3 plots run only after the complete MF result passes
+validation. A failed numerical gate stops the calculation, without loosening
+any tolerance or switching algorithms.
+
+One Turin CPU and 4 GiB are requested per case, with the permitted 21-day
+`htc-htc-ll` allocation. This is a scheduler limit, not a runtime prediction:
+the first-step probes took 15–18 minutes; later pressure solves start from
+the preceding pressure state and may have different costs. Every accepted
+step is checkpointed. An early stop signal one hour before the wall limit
+requests a stop at a physical-step boundary. If still partial, resubmit the
+same configuration with unchanged sources to resume saved kets; no automatic
+resubmission is enabled. Do not submit two active jobs to the same directory.
+Completed fields and reports will be published under
+`outputs/mean_field_sites_128x128_re200_pe200_da{1,10,100}_reaction_euler`.
+
+### Three-species reaction series
+
+`mean_field64_reaction_cpu.sbatch` requires `MF_DAMKOHLER=1`, `10`, or `100`.
+Each rate uses its own 64×64 Re=Pe=100 forward-Euler run/output paths, with
+c2 initially 1-c1 and c3 initially zero. All three species use Pe=100. The existing
+single-site pipeline now includes reaction in the bosonic predictor and
+automatically compares all species with a separate reacting forward-Euler
+DNS benchmark. Predictor, pressure relaxation, and correction all use Euler
+on explicit local Fock vectors, with no hidden RK stages. The previous eight
+predictor/correction subdivisions and pressure pseudo-step are retained.
+Use the [startup report](../outputs/reaction_64x64_re100_pe100_euler_series/STATUS.md)
+before launching long runs: the original gates have not been loosened.
+
+```bash
+sbatch --clusters=htc --export=ALL,MF_DAMKOHLER=1 hpc/mean_field64_reaction_cpu.sbatch
+sbatch --clusters=htc --export=ALL,MF_DAMKOHLER=10 hpc/mean_field64_reaction_cpu.sbatch
+sbatch --clusters=htc --export=ALL,MF_DAMKOHLER=100 hpc/mean_field64_reaction_cpu.sbatch
+```
+
+For startup validation add `--max-steps 3 --checkpoint-interval 1` after the
+script path and request a shorter allocation. Resume only after that job
+finishes, or use an `afterok` dependency. Never share a run directory between
+Da values. Source changes also require new directories; old checkpoints need
+their frozen sources. See [the reaction derivation and validation details](../REACTING_MIXING_LAYER.md).
+
 ### 64×64 thinner-shear preset
 
 The completed Re=Pe=50 job 11217985 took 26 hours 2 minutes including its

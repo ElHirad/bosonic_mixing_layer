@@ -1,5 +1,69 @@
 # 2-D incompressible mixing-layer solvers
 
+## Three-species reaction: Da=1, 10, 100
+
+The reacting extension uses c1+c2→c3 with rate Da c1 c2, initial c2=1-c1,
+and c3=0. The current request uses **64×64, Re=Pe=100, and RK4**
+throughout the mean-field stages and independent DNS. All species
+transport and reaction, pressure relaxation, and correction evolve explicit
+single-site bosonic states; the matched DNS remains a separate benchmark.
+Conservation checks now use the integrals of c1+c3 and c2+c3. The pipeline
+produces separate MF/DNS c1 and c2 plots, signed differences, and c3 diagnostics.
+The reacting DNS now uses genuine four-stage RK4, not the historical midpoint
+benchmark. Positive/negative/zero cell counts, fractions, signed concentration
+integrals, and extrema are recorded at every physical step, including t=0.
+Raw negative values and values below -1e-12 are distinguished; nothing is clipped.
+
+The [RK4 workflow](./hpc/mean_field64_reaction_rk4_preflight.sbatch) first runs
+full-time DNS screening and ten accepted MF steps per Da. Full trajectories
+and matched comparisons are conditional on all three tests passing. It retains
+the approved pressure tolerance 1e-7 and all other gates. All three full MF/DNS
+cases have now **completed and passed validation**, reaching t=0.65 in 1,040
+steps. See [64×64 RK4 status](./outputs/reaction_64x64_re100_pe100_rk4_series/STATUS.md)
+and the individual reports:
+
+- [Da=1: fields, signed concentrations, and MF/DNS comparison](./outputs/mean_field_sites_64x64_re100_pe100_da1_reaction_rk4_ptol1e7/RUN_REPORT.md).
+- [Da=10: fields, signed concentrations, and MF/DNS comparison](./outputs/mean_field_sites_64x64_re100_pe100_da10_reaction_rk4_ptol1e7/RUN_REPORT.md).
+- [Da=100: fields, signed concentrations, and MF/DNS comparison](./outputs/mean_field_sites_64x64_re100_pe100_da100_reaction_rk4_ptol1e7/RUN_REPORT.md).
+
+The [three-series statistics comparison](./outputs/reaction_64x64_re100_pe100_rk4_series/statistics/README.md)
+includes Reynolds stresses, vorticity thickness, and signed c1/c2 unmixedness,
+with **solid DNS / dashed MF** for all three Da in each panel. PNG/PDF figures,
+CSV time histories and y profiles, averaging definitions, and provenance are
+included. These statistics use the eight stored field snapshots, not every
+integration step. Velocity statistics coincide across Da because reaction
+does not feed back into momentum. Final MF/DNS differences are about 6% for
+normal Reynolds stresses, 18.4% for signed shear stress, 0.18% for vorticity
+thickness, and 0.40–0.51% for full-domain scalar covariance. Neither numerical
+validation nor agreement with DNS establishes positivity or convergence.
+
+See the [equations, operator derivation, limitations, and cluster commands](./REACTING_MIXING_LAYER.md).
+The earlier 128×128 DNS checks completed 2,080 steps to t=0.65 with dt=0.0003125
+and unchanged thickness 0.01875. Da=1 and 10 remained nonnegative; Da=100
+reached -0.001839 in c1/c2 and no negative c3. These are smaller undershoots
+than the user-accepted 64×64/Re=Pe=100 results. All three one-step mean-field
+probes passed every gate; pressure reached 9.9906e-9 in 51,480 iterations,
+below the unchanged 1e-8 tolerance. Its original full-trajectory preset was
+[`hpc/mean_field128_reaction_cpu.sbatch`](./hpc/mean_field128_reaction_cpu.sbatch),
+with per-step checkpoints and independent DNS/plotting after validation. See
+[128×128 screening and pressure status](./outputs/reaction_128x128_re200_pe200_euler_series/STATUS.md).
+The first full runs subsequently failed on step 2: pressure residual
+1.545023e-8 exceeded 1e-8 after 192,000 iterations in every case. The user
+approved testing **pressure tolerance 1e-7**, with all other gates unchanged.
+The [five-step validation workflow](./hpc/README.md#128128-pressure-tolerance-1e-7-validation)
+uses separate directories and permits full MF/DNS comparisons only after
+successful multi-step tests. Those 1e-7 tests then failed the coherence gate
+at step 2, and all their conditional full jobs were cancelled. They are archived,
+not the completed 64×64 RK4 series. No completed 128×128 reacting MF trajectory
+is claimed.
+
+The centered transport scheme is not generally positivity-preserving. The
+[preceding 64×64 Euler checks](./outputs/reaction_64x64_re100_pe100_euler_series/STATUS.md)
+are preserved, including their pressure-tolerance failures.
+The [earlier Re=Pe=200 startup checks](./outputs/reaction_64x64_re200_pe200_series/STATUS.md)
+are retained as history, not current production results.
+The completed nonreacting cases below remain unchanged.
+
 ## Completed 64×64 higher-Re/Pe run
 
 The higher-Re/Pe case uses **Re=Pe=200**, reducing viscosity and scalar diffusivity

@@ -11,14 +11,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from mixing_layer_mean_field import MeanFieldConfig, atomic_json, validate_results
+from compare_mean_field_dns import matched_dns_integrator
 
 
 def load_fields(path):
     with np.load(path, allow_pickle=False) as data:
         fields = {name: data[name].copy() for name in ("times", "u", "v", "concentration", "vorticity")}
+        for name in ("c1", "c2", "c3"):
+            if name in data:
+                fields[name] = data[name].copy()
         if "config_json" in data:
             fields["config"] = json.loads(str(data["config_json"]))
-        for key in ("run_metadata", "validation", "history"):
+        for key in ("run_metadata", "validation", "history", "initial_diagnostics"):
             if key+"_json" in data:
                 fields[key] = json.loads(str(data[key+"_json"]))
     n = fields["u"].shape[2]
@@ -48,13 +52,19 @@ def verify_dns_setup(config, reference):
         "subharmonic_amplitude": config.secondary_amplitude, "perturbation_phase": config.phase,
         "max_dt": config.dt, "t_end": config.final_time,
     }
+    if config.scalar_species == 3:
+        expected.update(scalar_species=3, damkohler=config.damkohler)
+    if config.scalar_species == 3 or config.time_integrator == "forward-euler" or "time_integrator" in reference["config"]:
+        expected["time_integrator"] = matched_dns_integrator(config)
     for key, value in expected.items():
         if reference["config"].get(key) != value:
             raise ValueError(f"DNS reference parameter does not match: {key}")
 
 
 def identical_initial_fields(primary, reference):
-    return all(np.array_equal(primary[key][0], reference[key][0]) for key in ("u", "v", "concentration"))
+    keys = ("u", "v", "concentration") + (("c1", "c2", "c3") if "c1" in primary or "c1" in reference else ())
+    return all(key in primary and key in reference and np.array_equal(primary[key][0], reference[key][0])
+               for key in keys)
 
 
 def comparison(primary, reference):
@@ -62,7 +72,10 @@ def comparison(primary, reference):
         raise ValueError("reference output times do not match")
     if not np.allclose(primary["times"], reference["times"], rtol=0, atol=1e-12):
         raise ValueError("reference output times do not match")
-    for field in ("u", "v", "concentration", "vorticity"):
+    species = ("c1", "c2", "c3") if "c1" in primary or "c1" in reference else ()
+    for field in ("u", "v", "concentration", "vorticity")+species:
+        if field not in primary or field not in reference:
+            raise ValueError(f"reference species missing: {field}")
         if primary[field].shape != reference[field].shape:
             raise ValueError(f"reference {field} grid/layout does not match")
         if not np.all(np.isfinite(primary[field])) or not np.all(np.isfinite(reference[field])):
@@ -70,7 +83,7 @@ def comparison(primary, reference):
     rows = []
     for k, time in enumerate(primary["times"]):
         row = {"time": float(time)}
-        for field in ("concentration", "vorticity"):
+        for field in ("concentration", "vorticity")+species:
             delta = primary[field][k]-reference[field][k]
             row[field+"_relative_l2"] = float(np.linalg.norm(delta)/max(np.linalg.norm(reference[field][k]), 1e-30))
             row[field+"_max_abs"] = float(np.max(np.abs(delta)))
@@ -131,7 +144,9 @@ def plot_dns_comparison(primary, reference, config, field, destination):
     fig.colorbar(error_artist, cax=error_bar_axes, orientation="horizontal").set_label(f"Signed {field} difference")
     match_label = "identical initial fields" if identical_initial_fields(primary, reference) else "reference initial fields differ"
     fig.suptitle(f"Single-site mean field vs independent DNS: {field}\n"
-                 f"{config.n}×{config.n}, Re={config.reynolds:g}, Pe={config.peclet:g}; {match_label}, matched output times")
+                 f"{config.n}×{config.n}, Re={config.reynolds:g}, Pe={config.peclet:g}"
+                 +(f", Da={config.damkohler:g}" if config.scalar_species == 3 else "")
+                 +f"; {match_label}, matched output times")
     fig.savefig(destination, dpi=160)
     plt.close(fig)
 
@@ -162,17 +177,20 @@ def plot_dns_diagnostics(primary, reference, config, destination):
         ax.grid(alpha=.25)
         ax.legend(fontsize=9)
     match_label = "Matched initial-condition DNS comparison" if identical_initial_fields(primary, reference) else "Mean-field / DNS reference comparison"
-    fig.suptitle(match_label+"\nMF: Chorin split with local bosonic operators; DNS: projected midpoint")
+    dns_method = reference.get("run_metadata", {}).get("time_integrator", matched_dns_integrator(config))
+    fig.suptitle(match_label+f"\nMF: Chorin split with local bosonic operators; DNS: projected {dns_method}")
     fig.savefig(destination, dpi=180)
     plt.close(fig)
 
 
-def plot_grid(data, config, field, destination):
+def plot_grid(data, config, field, destination, method="Explicit single-site bosonic mean field", bounds=None):
     n = config.n
     fig, axes = plt.subplots(2, 4, figsize=(14.5, 7.1), sharex=True, sharey=True, constrained_layout=True)
     vort = field == "vorticity"
     values = data[field]
     vmin, vmax = (-20, 20) if vort else (min(0., float(values.min())), max(1., float(values.max())))
+    if bounds is not None:
+        vmin, vmax = bounds
     for k, ax in enumerate(axes.flat):
         array = values[k]
         xx, yy, array = field_coordinates(array, config, field)
@@ -194,10 +212,13 @@ def plot_grid(data, config, field, destination):
     for ax in axes[:, 0]:
         ax.set_ylabel("y")
     bar = fig.colorbar(artist, ax=axes, shrink=.88, pad=.02, extend="both" if vort else "neither")
-    bar.set_label("Vorticity (colour saturated beyond ±20)" if vort else "Conserved concentration")
-    fig.suptitle(f"Explicit single-site bosonic mean field: {field}\n"
+    bar.set_label("Vorticity (colour saturated beyond ±20)" if vort else
+                  (f"Concentration {field}" if config.scalar_species == 3 else "Conserved concentration"))
+    fig.suptitle(f"{method}: {field}\n"
                  f"{n}×{n}, Re={config.reynolds:g}, Pe={config.peclet:g}, "
-                 f"{config.boundary_y} y, cutoff {config.boson_cutoff}")
+                 f"{config.boundary_y} y"
+                 +(f", Da={config.damkohler:g}" if config.scalar_species == 3 else "")
+                 +(f", cutoff {config.boson_cutoff}" if "mean field" in method else ""))
     fig.savefig(destination, dpi=180)
     plt.close(fig)
 
@@ -207,6 +228,10 @@ def make_plots(result_path, output_dir, references=None, convergence=None):
     config = MeanFieldConfig(**validation["config"])
     output_dir.mkdir(parents=True, exist_ok=True)
     data = load_fields(result_path)
+    if config.scalar_species == 3:
+        if convergence:
+            raise ValueError("reactive convergence studies require separately matched time/configuration checks")
+        return make_reaction_plots(data, config, validation, output_dir, references)
     with np.load(result_path, allow_pickle=False) as saved:
         history = json.loads(str(saved["history_json"]))
     for field in ("vorticity", "concentration"):
@@ -288,6 +313,144 @@ def make_plots(result_path, output_dir, references=None, convergence=None):
                 writer = csv.DictWriter(file, fieldnames=result["metrics"][0].keys(), lineterminator="\n")
                 writer.writeheader()
                 writer.writerows(result["metrics"])
+    return summary
+
+
+def reaction_sign_comparison(datasets, config, output_dir):
+    """Export every physical step, including t=0; never infer missing history."""
+    metrics = ("minimum", "maximum", "mass", "positive_cells", "negative_cells", "zero_cells",
+               "positive_fraction", "negative_fraction", "zero_fraction", "material_negative_cells",
+               "material_negative_fraction", "positive_integral", "negative_integral")
+    records, summary = [], {}
+    fig, axes = plt.subplots(2, 3, figsize=(15, 7), constrained_layout=True)
+    for values, label, style in datasets:
+        initial = values.get("initial_diagnostics")
+        history = values.get("history", [])
+        if initial is None or not history or "c1_negative_integral" not in history[0]:
+            plt.close(fig)
+            raise ValueError("complete signed-concentration history including t=0 is required")
+        rows = [dict(step=0, time=0., **initial), *history]
+        if [row["step"] for row in rows] != list(range(config.steps+1)):
+            plt.close(fig)
+            raise ValueError("incomplete signed-concentration step history")
+        times = [row["time"] for row in rows]
+        summary[label] = {}
+        for column, name in enumerate(("c1", "c2", "c3")):
+            for row in rows:
+                records.append(dict(method=label, species=name, step=row["step"], time=row["time"],
+                                    **{key: row[f"{name}_{key}"] for key in metrics}))
+            summary[label][name] = {
+                "maximum_negative_fraction": max(row[f"{name}_negative_fraction"] for row in rows),
+                "maximum_material_negative_fraction": max(row[f"{name}_material_negative_fraction"] for row in rows),
+                "minimum_negative_integral": min(row[f"{name}_negative_integral"] for row in rows),
+                "maximum_positive_integral": max(row[f"{name}_positive_integral"] for row in rows),
+                "first_negative_step": next((row["step"] for row in rows if row[f"{name}_negative_cells"]), None),
+                "first_material_negative_step": next((row["step"] for row in rows if row[f"{name}_material_negative_cells"]), None),
+                "final_positive_integral": rows[-1][f"{name}_positive_integral"],
+                "final_negative_integral": rows[-1][f"{name}_negative_integral"],
+            }
+            for sign, color in (("positive", "C2"), ("negative", "C3")):
+                axes[0, column].plot(times, [r[f"{name}_{sign}_fraction"] for r in rows],
+                                     style, color=color, label=f"{label} {sign}")
+                axes[1, column].plot(times, [r[f"{name}_{sign}_integral"] for r in rows],
+                                     style, color=color, label=f"{label} {sign}")
+            axes[0, column].set_title(name)
+    for index, ax in enumerate(axes.flat):
+        ax.set(xlabel="Physical time", ylabel="Raw cell fraction (>0 / <0)" if index < 3
+               else "Signed concentration integral")
+        ax.axhline(0., color="black", linewidth=.7)
+        ax.grid(alpha=.25)
+        ax.legend(fontsize=8)
+    fig.suptitle(f"Unclipped species signs: {config.n}×{config.n}, Re=Pe={config.reynolds:g}, Da={config.damkohler:g}")
+    fig.savefig(output_dir/"concentration_signs.png", dpi=170)
+    plt.close(fig)
+    with (output_dir/"concentration_sign_history.csv").open("w", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=records[0].keys(), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(records)
+    return {"material_negative_threshold": -1e-12, "raw_sign_threshold": 0.,
+            "integral_definition": "unit-area mean(max(c,0)) and signed mean(min(c,0)); observational only",
+            "includes_initial_state": True, "methods": summary}
+
+
+def make_reaction_plots(data, config, validation, output_dir, references):
+    """Expose both reacting species, the product, and uncorrected invariants."""
+    history = data["history"]
+    ranges = validation["species_ranges_all_steps"]
+    modes = pairing_modes(data["vorticity"])
+    ratio = modes[:, config.secondary_mode]/np.maximum(modes[:, config.kh_mode], 1e-30)
+    summary = {"validation": validation, "reaction": {"law": "c1+c2 -> c3; rate=Da*c1*c2",
+        "damkohler": config.damkohler, "conserved_integrals": ["c1+c3", "c2+c3"],
+        "caution": "Centered transport is not positivity-preserving; negative concentrations/rates are retained, not physical reverse chemistry."},
+        "species_ranges_all_steps": ranges,
+        "concentration_range_all_steps": {"minimum": min(v["minimum"] for v in ranges.values()),
+                                           "maximum": max(v["maximum"] for v in ranges.values())},
+        "pairing": {"ratio": ratio.tolist(), "times": data["times"].tolist(),
+                    "caution": "Mode ratios do not by themselves establish vortex merger."},
+        "references": {}, "convergence": {}}
+    reference = None
+    for label, path in (references or {}).items():
+        if label != "DNS":
+            raise ValueError("reactive plots currently accept only a matched DNS reference")
+        reference = load_fields(path)
+        verify_dns_setup(config, reference)
+        if not identical_initial_fields(data, reference):
+            raise ValueError("reactive DNS must match all three initial species and velocities exactly")
+        if reference.get("run_metadata", {}).get("mean_field_fingerprint") != validation["fingerprint"]:
+            raise ValueError("reactive DNS fingerprint does not match the mean-field source")
+        rows = comparison(data, reference)
+        summary["references"][label] = {"file": str(path), "metrics": rows, "identical_initial_fields": True,
+            "metadata": reference.get("run_metadata"), "validation": reference.get("validation")}
+        with (output_dir/"comparison_DNS.csv").open("w", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=rows[0].keys(), lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(rows)
+    for field in ("c1", "c2", "c3", "vorticity"):
+        bounds = None
+        if reference is not None and field != "vorticity":
+            bounds = (min(0., float(data[field].min()), float(reference[field].min())),
+                      max(1., float(data[field].max()), float(reference[field].max())))
+        plot_grid(data, config, field, output_dir/f"mean_field_{field}.png", bounds=bounds)
+        if reference is not None:
+            plot_grid(reference, config, field, output_dir/f"dns_{field}.png", method="Independent DNS", bounds=bounds)
+            plot_dns_comparison(data, reference, config, field, output_dir/f"mean_field_vs_dns_{field}.png")
+    fig, axes = plt.subplots(2, 3, figsize=(16, 8), constrained_layout=True)
+    datasets = [(data, "MF", "-")] + ([(reference, "DNS", "--")] if reference is not None else [])
+    for values, label, style in datasets:
+        rows = values["history"]
+        times = [r["time"] for r in rows]
+        for name, color in (("c1", "C0"), ("c2", "C1"), ("c3", "C2")):
+            axes[0, 0].plot(times, [r[f"{name}_mass"] for r in rows], style, color=color, label=f"{label} {name}")
+            axes[1, 0].plot(times, [r[f"{name}_minimum"] for r in rows], style, color=color, label=f"{label} min {name}")
+            axes[1, 1].plot(times, [r[f"{name}_maximum"] for r in rows], style, color=color, label=f"{label} max {name}")
+        for invariant in ("13", "23"):
+            axes[0, 1].semilogy(times, np.maximum([r[f"invariant_{invariant}_error"] for r in rows], 1e-17),
+                                 style, label=f"{label} M{invariant}")
+        axes[1, 2].plot(times, [r["reaction_rate_minimum"] for r in rows], style, label=f"{label} min rate")
+        axes[1, 2].plot(times, [r["reaction_rate_mean"] for r in rows], style, label=f"{label} mean rate")
+    if reference is not None:
+        errors = summary["references"]["DNS"]["metrics"]
+        for name in ("c1", "c2", "c3", "velocity", "vorticity"):
+            axes[0, 2].plot(data["times"], [100*r[name+"_relative_l2"] for r in errors], "o-", label=name)
+    for ax, label in zip(axes.flat, ("Domain-mean species amount", "Raw relative invariant drift",
+        "MF − DNS relative L2 difference (%)", "Species minima (not clipped)", "Species maxima (not clipped)",
+        "Da c1 c2 (negative rates are unphysical)")):
+        ax.set(xlabel="Physical time", ylabel=label)
+        ax.grid(alpha=.25)
+        if ax.get_legend_handles_labels()[0]:
+            ax.legend(fontsize=8)
+    axes[1, 0].axhline(0, color="black", linestyle=":")
+    axes[1, 1].axhline(1, color="black", linestyle=":")
+    fig.suptitle(f"Reacting mixing layer: {config.n}×{config.n}, Re={config.reynolds:g}, "
+                 f"Pe={config.peclet:g}, Da={config.damkohler:g}")
+    fig.savefig(output_dir/"reaction_diagnostics.png", dpi=170)
+    plt.close(fig)
+    # Older archives without sign histories remain plottable, but no invented
+    # all-step statistics are reported for them.
+    if all("initial_diagnostics" in values and values["history"]
+           and "c1_negative_integral" in values["history"][0] for values, _, _ in datasets):
+        summary["sign_statistics"] = reaction_sign_comparison(datasets, config, output_dir)
+    atomic_json(output_dir/"summary.json", summary)
     return summary
 
 

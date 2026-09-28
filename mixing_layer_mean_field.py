@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single-site bosonic mean-field mixing layer with conserved concentration.
+"""Single-site bosonic mixing layer with passive or reacting concentrations.
 
 Every dynamical stage evolves explicit local Fock vectors under mean-field
 operators f_j a_j^dagger + b_j a_j + c_j I. No TDVP, DNS call, amplitude-only
@@ -63,6 +63,9 @@ class MeanFieldConfig:
     pressure_cfl: float = 0.125
     pressure_tolerance: float = 1e-8
     pressure_max_steps: int = 12000
+    scalar_species: int = 1
+    damkohler: float = 0.0
+    time_integrator: str = "rk4"
 
     def __post_init__(self):
         for value in asdict(self).values():
@@ -74,6 +77,10 @@ class MeanFieldConfig:
             raise ValueError("times, scales, thicknesses, Re, Pe, and tolerance must be positive")
         if self.boundary_y not in ("free-slip", "periodic"):
             raise ValueError("unknown y boundary condition")
+        if self.scalar_species not in (1, 3) or self.damkohler < 0:
+            raise ValueError("scalar_species must be 1 or 3; damkohler must be nonnegative")
+        if self.scalar_species == 1 and self.damkohler != 0:
+            raise ValueError("reaction requires scalar_species=3")
         for key in ("n", "boson_cutoff", "predictor_substeps", "correction_substeps",
                     "pressure_max_steps", "kh_mode", "secondary_mode"):
             value = getattr(self, key)
@@ -85,8 +92,11 @@ class MeanFieldConfig:
             raise ValueError("perturbation mode exceeds the Nyquist limit")
         if not 0 < self.shear_center < 1 or not 0 < self.middle_fraction < 1:
             raise ValueError("shear location/fraction must be in (0,1)")
-        if not 0 < self.pressure_cfl <= 0.30:
-            raise ValueError("pressure_cfl must be in (0,0.30] for explicit RK4 stability")
+        if self.time_integrator not in ("rk4", "forward-euler"):
+            raise ValueError("time_integrator must be rk4 or forward-euler")
+        pressure_limit = .25 if self.time_integrator == "forward-euler" else .30
+        if not 0 < self.pressure_cfl <= pressure_limit:
+            raise ValueError(f"pressure_cfl must be in (0,{pressure_limit}] for {self.time_integrator}")
         ratio = self.final_time/self.dt
         if not np.isclose(ratio, round(ratio), rtol=1e-12, atol=1e-12) or round(ratio) < 7:
             raise ValueError("final_time/dt must be an integer >= 7 (eight snapshots)")
@@ -136,6 +146,8 @@ def initial_amplitudes(config):
     u = np.diff(psi, axis=0)/h if channel else (np.roll(psi, -1, axis=0)-psi)/h+base.mean()
     v = -(np.roll(psi, -1, axis=1)-psi)/h
     c = np.repeat(((profile-profile.min())/(profile.max()-profile.min()))[:, None], n, axis=1)
+    if config.scalar_species == 3:
+        c = np.stack((c, 1-c, np.zeros_like(c)))
     return u/config.velocity_scale, v/config.velocity_scale, c/config.scalar_scale
 
 
@@ -145,8 +157,57 @@ def read_fields(states, bosons, operators, config):
     if any(np.max(np.abs(value.imag)) > 1e-12 for value in fields.values()):
         raise FloatingPointError("real physical fields developed imaginary amplitudes")
     return {f: value.real*({"u": config.velocity_scale, "v": config.velocity_scale,
-                           "phi": config.pressure_scale, "c": config.scalar_scale}[f])
+                           "phi": config.pressure_scale}.get(f, config.scalar_scale))
             for f, value in fields.items()}
+
+
+def scalar_references(fields, config):
+    """Conserved integral(s), not the individual reactive species amounts."""
+    if config.scalar_species == 1:
+        return float(np.mean(fields["c"]))
+    return np.array([np.mean(fields[key]+fields["c3"]) for key in ("c1", "c2")])
+
+
+def scalar_diagnostics(fields, config, reference):
+    current = scalar_references(fields, config)
+    error = np.abs(np.asarray(current)-reference)/np.maximum(np.abs(reference), 1e-12)
+    c = fields["c"] if config.scalar_species == 1 else np.stack([fields[f"c{i}"] for i in (1, 2, 3)])
+    result = {"scalar_mass_error": float(np.max(error)), "scalar_mass": float(np.mean(c)),
+              "scalar_minimum": float(c.min()), "scalar_maximum": float(c.max())}
+    if config.scalar_species == 3:
+        for index, name in enumerate(("13", "23")):
+            result[f"invariant_{name}_mass"] = float(current[index])
+            result[f"invariant_{name}_error"] = float(error[index])
+        for name in ("c1", "c2", "c3"):
+            result.update({f"{name}_mass": float(fields[name].mean()),
+                           f"{name}_minimum": float(fields[name].min()),
+                           f"{name}_maximum": float(fields[name].max())})
+            values = fields[name]
+            positive, negative, zero = values > 0, values < 0, values == 0
+            # Unit-area domain: cell means of the signed parts are integrals.
+            # These are observations only; no species or ket is modified.
+            result.update({f"{name}_positive_cells": int(positive.sum()),
+                           f"{name}_negative_cells": int(negative.sum()),
+                           f"{name}_zero_cells": int(zero.sum()),
+                           f"{name}_positive_fraction": float(positive.mean()),
+                           f"{name}_negative_fraction": float(negative.mean()),
+                           f"{name}_zero_fraction": float(zero.mean()),
+                           f"{name}_material_negative_cells": int(np.count_nonzero(values < -1e-12)),
+                           f"{name}_material_negative_fraction": float(np.mean(values < -1e-12)),
+                           f"{name}_positive_integral": float(np.where(positive, values, 0.).mean()),
+                           f"{name}_negative_integral": float(np.where(negative, values, 0.).mean())})
+        rate = config.damkohler*fields["c1"]*fields["c2"]
+        result.update(reaction_rate_mean=float(rate.mean()), reaction_rate_minimum=float(rate.min()),
+                      reaction_negative_rate_fraction=float(np.mean(rate < 0)))
+    return result
+
+
+def saved_field_mapping(config):
+    mapping = {"u": "u", "v": "v", "pressure_impulse": "phi",
+               "concentration": "c" if config.scalar_species == 1 else "c1"}
+    if config.scalar_species == 3:
+        mapping.update({f"c{i}": f"c{i}" for i in (1, 2, 3)})
+    return mapping
 
 
 def divergence(u, v, config):
@@ -167,37 +228,46 @@ def relative_difference(a, b):
     return float(np.linalg.norm(a-b)/max(np.linalg.norm(a), 1e-12))
 
 
-def advance_one_step(states, config, bosons, operators):
+def advance_one_step(states, config, bosons, operators, stage_observer=None, pressure_observer=None):
     """All three stages evolve explicit local kets under their MF generators."""
-    tentative = bosons.advance(states, config.dt, operators.predictor, config.predictor_substeps)
+    tentative = bosons.advance(states, config.dt, operators.predictor, config.predictor_substeps,
+                               method=config.time_integrator)
+    if stage_observer is not None:
+        stage_observer("predictor", tentative)
     star = bosons.amplitudes(tentative)
     relaxed, stats = relax_pressure(tentative, bosons, operators, config.pseudo_dt,
-                                    config.pressure_tolerance, config.pressure_max_steps)
+                                    config.pressure_tolerance, config.pressure_max_steps,
+                                    method=config.time_integrator, observer=pressure_observer)
+    if stage_observer is not None:
+        stage_observer("pressure", relaxed)
     alpha_relaxed = bosons.amplitudes(relaxed)
-    corrected = bosons.advance(relaxed, 1.0, operators.correction, config.correction_substeps)
+    corrected = bosons.advance(relaxed, 1.0, operators.correction, config.correction_substeps,
+                               method=config.time_integrator)
+    if stage_observer is not None:
+        stage_observer("correction", corrected)
     alpha_corrected = bosons.amplitudes(corrected)
     s = operators.layout.slices
+    scalars = operators.layout.scalar_slice
     velocity = slice(s["u"].start, s["v"].stop)
     stats.update({
         "pressure_velocity_leakage": relative_difference(star[velocity], alpha_relaxed[velocity]),
-        "pressure_scalar_leakage": relative_difference(star[s["c"]], alpha_relaxed[s["c"]]),
+        "pressure_scalar_leakage": relative_difference(star[scalars], alpha_relaxed[scalars]),
         "correction_pressure_leakage": relative_difference(alpha_relaxed[s["phi"]], alpha_corrected[s["phi"]]),
-        "correction_scalar_leakage": relative_difference(alpha_relaxed[s["c"]], alpha_corrected[s["c"]]),
+        "correction_scalar_leakage": relative_difference(alpha_relaxed[scalars], alpha_corrected[scalars]),
     })
     return corrected, stats
 
 
 def diagnostics(states, config, bosons, operators, mass_reference, stage=None):
     fields = read_fields(states, bosons, operators, config)
-    u, v, c, phi = (fields[f] for f in ("u", "v", "c", "phi"))
+    u, v, phi = (fields[f] for f in ("u", "v", "phi"))
     if not all(np.all(np.isfinite(a)) for a in fields.values()):
         raise FloatingPointError("non-finite mean-field observables")
     div = divergence(u, v, config)
     result = {
         "relative_divergence": float(np.linalg.norm(div)/max(config.n*(np.linalg.norm(u)+np.linalg.norm(v)), 1e-12)),
         "max_divergence": float(np.max(np.abs(div))),
-        "scalar_mass_error": float(abs(np.mean(c)-mass_reference)/max(abs(mass_reference), 1e-12)),
-        "scalar_mass": float(np.mean(c)), "scalar_minimum": float(c.min()), "scalar_maximum": float(c.max()),
+        **scalar_diagnostics(fields, config, mass_reference),
         "pressure_mean": float(abs(np.mean(phi))),
         "wall_normal_velocity": float(np.max(np.abs(v[[0, -1]]))) if config.boundary_y == "free-slip" else 0.0,
         "kinetic_energy": float(0.5*(np.sum(u*u)+np.sum(v*v))/config.n**2),
@@ -273,7 +343,8 @@ def _run_locked(config, output_dir, resume, checkpoint_interval, max_steps, stop
     target = min(config.steps, config.steps if max_steps is None else max_steps)
     bosons, operators = LocalBosons(config.boson_cutoff), MeanFieldOperators(config)
     states = bosons.coherent_states(operators.layout.pack(*initial_amplitudes(config)))
-    mass_reference = float(np.mean(read_fields(states, bosons, operators, config)["c"]))
+    mass_reference = scalar_references(read_fields(states, bosons, operators, config), config)
+    initial_diagnostics = diagnostics(states, config, bosons, operators, mass_reference)
     steps, snapshots, history, completed = [], [], [], 0
     if resume:
         with np.load(checkpoint, allow_pickle=False) as saved:
@@ -281,7 +352,8 @@ def _run_locked(config, output_dir, resume, checkpoint_interval, max_steps, stop
                 raise ValueError("checkpoint configuration/source/version mismatch")
             completed = int(saved["completed_step"])
             states = saved["terminal_local_states"].copy()
-            mass_reference = float(saved["mass_reference"])
+            if not np.allclose(saved["mass_reference"], mass_reference, rtol=0, atol=1e-14):
+                raise ValueError("checkpoint conservation references disagree with initialization")
             steps = saved["snapshot_steps"].tolist()
             history = json.loads(str(saved["history_json"]))
             snapshots = [s.copy() for s in saved["local_states"]]
@@ -305,13 +377,13 @@ def _run_locked(config, output_dir, resume, checkpoint_interval, max_steps, stop
     def payload():
         fields = [read_fields(s, bosons, operators, config) for s in snapshots]
         return dict(
-            format_version=np.array(2), config_json=np.array(json.dumps(asdict(config), sort_keys=True)),
+            format_version=np.array(3), config_json=np.array(json.dumps(asdict(config), sort_keys=True)),
             fingerprint=np.array(fingerprint), completed_step=np.array(completed), requested_steps=np.array(config.steps),
             mass_reference=np.array(mass_reference), snapshot_steps=np.array(steps), times=np.array(steps)*config.dt,
             history_json=np.array(json.dumps(history, allow_nan=False)), terminal_local_states=states,
+            initial_diagnostics_json=np.array(json.dumps(initial_diagnostics, allow_nan=False)),
             local_states=np.stack(snapshots),
-            **{name: np.stack([s[key] for s in fields]) for name, key in
-               (("u", "u"), ("v", "v"), ("concentration", "c"), ("pressure_impulse", "phi"))},
+            **{name: np.stack([s[key] for s in fields]) for name, key in saved_field_mapping(config).items()},
         )
 
     atomic_json(output_dir/"run_status.json", {"state": "running", "completed_step": completed})
@@ -324,6 +396,10 @@ def _run_locked(config, output_dir, resume, checkpoint_interval, max_steps, stop
             safe_dt = min(0.35/max(rate, 1e-12), 0.2*min(config.reynolds, config.peclet)/config.n**2)
             if config.dt > safe_dt*(1+1e-12):
                 raise FloatingPointError("physical dt exceeds advective/diffusive safety bound")
+            if config.scalar_species == 3:
+                reaction_rate = config.damkohler*np.max(np.abs(fields["c1"])+np.abs(fields["c2"]))
+                if config.dt/config.predictor_substeps*reaction_rate > 0.25*(1+1e-12):
+                    raise FloatingPointError("predictor substep exceeds reaction safety bound")
             candidate, stats = advance_one_step(states, config, bosons, operators)
             row = diagnostics(candidate, config, bosons, operators, mass_reference, stats)
             check_quality(row, config)
@@ -347,9 +423,14 @@ def _run_locked(config, output_dir, resume, checkpoint_interval, max_steps, stop
             "python": platform.python_version(), "resumed_from_step": resumed_from,
             "state_representation": "product of explicit single-site Fock vectors",
             "local_generator": "f_j a_j^dagger + b_j a_j + c_j I",
-            "pressure_method": "single-site mean-field operator relaxation (RK4)",
+            "pressure_method": f"single-site mean-field operator relaxation ({config.time_integrator})",
+            "time_integrator": config.time_integrator,
             "mass_projection": False, "coherent_state_reset": False, "tdvp": False,
             "direct_poisson_solve": False, "operator_counts": operators.summary(),
+            "scalar_species": config.scalar_species, "damkohler": config.damkohler,
+            "reaction_method": "coupled predictor single-site operators" if config.scalar_species == 3 else "none",
+            "conservation": "integrals of c1+c3 and c2+c3" if config.scalar_species == 3 else "integral of c",
+            "scalar_clipping": False,
         }))
         state = "complete" if completed == config.steps else "partial"
         result_path = output_dir/("mean_field_snapshots.npz" if state == "complete" else "partial_snapshots.npz")
@@ -386,8 +467,8 @@ def validate_results(path):
         initial = bosons.coherent_states(operators.layout.pack(*initial_amplitudes(config)))
         if not np.allclose(initial, data["local_states"][0], rtol=0, atol=1e-14):
             raise ValueError("initial state does not match configuration")
-        reference = float(np.mean(read_fields(initial, bosons, operators, config)["c"]))
-        if abs(reference-float(data["mass_reference"])) > 1e-14:
+        reference = scalar_references(read_fields(initial, bosons, operators, config), config)
+        if not np.allclose(reference, data["mass_reference"], rtol=0, atol=1e-14):
             raise ValueError("incorrect initial scalar mass reference")
         history = json.loads(str(data["history_json"]))
         if [row["step"] for row in history] != list(range(1, config.steps+1)):
@@ -399,18 +480,38 @@ def validate_results(path):
         for k, states in enumerate(data["local_states"]):
             check_quality(diagnostics(states, config, bosons, operators, reference), config)
             fields = read_fields(states, bosons, operators, config)
-            fields.update(pressure=fields["phi"]/config.dt, concentration=fields["c"],
-                          pressure_impulse=fields["phi"], vorticity=vorticity(fields["u"], fields["v"], config))
-            for name in ("u", "v", "pressure", "pressure_impulse", "concentration", "vorticity"):
-                if data[name][k].shape != fields[name].shape or not np.allclose(data[name][k], fields[name], rtol=0, atol=1e-12):
+            expected = {name: fields[key] for name, key in saved_field_mapping(config).items()}
+            expected.update(pressure=fields["phi"]/config.dt, vorticity=vorticity(fields["u"], fields["v"], config))
+            for name, values in expected.items():
+                if data[name][k].shape != values.shape or not np.allclose(data[name][k], values, rtol=0, atol=1e-12):
                     raise ValueError(f"{name} does not match stored bosonic states")
-        return {
+            if config.scalar_species == 3 and "c1_negative_integral" in history[0]:
+                recorded = (json.loads(str(data["initial_diagnostics_json"])) if k == 0
+                            else history[int(schedule[k])-1])
+                for name, value in scalar_diagnostics(fields, config, reference).items():
+                    if name not in recorded or not np.isclose(recorded[name], value, rtol=0, atol=1e-12):
+                        raise ValueError(f"saved scalar diagnostic {name} does not match stored bosonic states")
+        validation = {
             "validated": True, "completed_steps": config.steps, "snapshots": 8,
             "config": asdict(config), "fingerprint": str(data["fingerprint"]),
             "worst_step": {key: max(row[key] for row in history) for key in (*GATES, "pressure_residual")},
             "total_pressure_iterations": sum(row["pressure_iterations"] for row in history),
             "final_step": history[-1], "run_metadata": json.loads(str(data["run_metadata_json"])),
         }
+        if config.scalar_species == 3:
+            initial_row = scalar_diagnostics(read_fields(initial, bosons, operators, config), config, reference)
+            rows = [initial_row, *history]
+            validation.update(
+                validation_scope="numerical conservation, flow, and local-state gates; positivity is reported separately",
+                positivity_preserved=all(row["scalar_minimum"] >= -1e-12 for row in rows),
+                species_ranges_all_steps={name: {
+                    "minimum": min(row[name+"_minimum"] for row in rows),
+                    "maximum": max(row[name+"_maximum"] for row in rows)} for name in ("c1", "c2", "c3")},
+                minimum_reaction_rate=min(row["reaction_rate_minimum"] for row in rows),
+                maximum_negative_rate_fraction=max(row["reaction_negative_rate_fraction"] for row in rows),
+                initial=initial_row,
+            )
+        return validation
 
 
 def main():

@@ -55,13 +55,20 @@ class LocalBosons:
         growth = self.expectation_from_action(states, action).real
         return action-growth[:, None]*states
 
-    def advance(self, states, interval, generator, substeps=1):
-        """RK4 on local Fock vectors; rebuild all mean fields at every RK stage."""
+    def advance(self, states, interval, generator, substeps=1, method="rk4"):
+        """Integrate local Fock vectors, not amplitudes, with Euler or legacy RK4."""
         if substeps < 1 or int(substeps) != substeps:
             raise ValueError("substeps must be a positive integer")
+        if method not in ("forward-euler", "rk4"):
+            raise ValueError("unknown local-state time integrator")
         step = interval/substeps
         for _ in range(substeps):
             k1 = self.derivative(states, generator)
+            if method == "forward-euler":
+                # Normalize only the ket norm, not its coherent-state shape.
+                # No exponential, midpoint evaluation, or amplitude reset.
+                states = self.normalize(states+step*k1)
+                continue
             k2 = self.derivative(states+step*k1/2, generator)
             k3 = self.derivative(states+step*k2/2, generator)
             k4 = self.derivative(states+step*k3, generator)
@@ -81,7 +88,7 @@ class LocalBosons:
 
 
 def relax_pressure(states, bosons, operators, pseudo_dt, tolerance, max_steps,
-                   check_every=20):
+                   check_every=20, method="rk4", observer=None):
     """Pressure is relaxed by the same explicit single-site operator evolution.
 
     The full symmetric MF decoupling includes annihilation operators on the
@@ -98,12 +105,15 @@ def relax_pressure(states, bosons, operators, pseudo_dt, tolerance, max_steps,
         if step % check_every == 0 or step == max_steps:
             alpha = bosons.amplitudes(states)
             residual = float(np.linalg.norm(operators.pressure(alpha)[p])/normalizer)
+            if observer is not None:
+                observer({"pressure_iterations": step, "pressure_residual": residual,
+                          "pressure_pseudo_time": step*pseudo_dt})
             if not np.isfinite(residual):
                 raise FloatingPointError("non-finite single-site pressure relaxation")
             if residual <= tolerance:
                 return states, {"pressure_residual": residual, "pressure_iterations": step,
                                 "pressure_pseudo_time": step*pseudo_dt}
         if step < max_steps:
-            states = bosons.advance(states, pseudo_dt, operators.pressure)
+            states = bosons.advance(states, pseudo_dt, operators.pressure, method=method)
     raise FloatingPointError(f"single-site pressure relaxation failed after {max_steps} steps: "
                              f"residual={residual:.6e}, tolerance={tolerance:.6e}")

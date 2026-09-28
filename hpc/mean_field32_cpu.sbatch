@@ -46,7 +46,7 @@ print("Plotting check passed. NumPy", numpy.__version__, "SciPy", scipy.__versio
 PY
 # Freeze the standalone benchmark and plotting sources too. The base batch
 # script freezes/validates the three actual mean-field production modules.
-for source in mixing_layer_dns.py compare_mean_field_dns.py plot_mean_field_results.py postprocess_mean_field_run.py; do
+for source in mixing_layer_dns.py reacting_dns.py compare_mean_field_dns.py plot_mean_field_results.py postprocess_mean_field_run.py; do
     if [[ -f "${MF_RUN_DIR}/source/${source}" ]]; then
         cmp "${PROJECT_ROOT}/${source}" "${MF_RUN_DIR}/source/${source}" || {
             echo "Post-processing source changed; use a new MF_RUN_DIR or its frozen sources." >&2

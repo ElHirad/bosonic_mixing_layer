@@ -1,0 +1,15 @@
+{
+  "state": "complete",
+  "slurm_job_id": "11431547",
+  "pressure_converged": [
+    true,
+    true,
+    true
+  ],
+  "accepted_steps": [
+    1,
+    1,
+    1
+  ],
+  "report": "PRESSURE_CONVERGENCE.md"
+}

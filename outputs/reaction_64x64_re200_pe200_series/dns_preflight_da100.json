@@ -1,0 +1,90 @@
+{
+  "kind": "independent DNS preflight only, not a mean-field result",
+  "completed_steps": 1040,
+  "config": {
+    "n": 64,
+    "reynolds": 200,
+    "peclet": 200,
+    "dt": 0.000625,
+    "final_time": 0.65,
+    "boundary_y": "free-slip",
+    "shear_center": 0.5,
+    "middle_fraction": 0.3,
+    "transition": 0.01875,
+    "kh_width": 0.12,
+    "kh_mode": 2,
+    "kh_amplitude": 2.5,
+    "secondary_mode": 1,
+    "secondary_amplitude": 0.5,
+    "phase": 0.0,
+    "velocity_scale": 8.0,
+    "pressure_scale": 4.0,
+    "scalar_scale": 4.0,
+    "boson_cutoff": 12,
+    "predictor_substeps": 8,
+    "correction_substeps": 8,
+    "pressure_cfl": 0.125,
+    "pressure_tolerance": 1e-08,
+    "pressure_max_steps": 48000,
+    "scalar_species": 3,
+    "damkohler": 100.0
+  },
+  "mean_field_source_fingerprint": "af5f9469e2ceefc67783b7b2eb330bd4bfa1d35c004701270c18c06ee4051add",
+  "source_sha256": {
+    "reaction_dns_preflight.py": "9ce424842163491e10ec9e9d7602a51c7b6eae835223ee84053bbbfc1c040e6e",
+    "reacting_dns.py": "fced922db7f3bdf91d1933e117ec1b740caf9b61cd31907940b328abbb341fb3",
+    "mixing_layer_dns.py": "3e866ba1a591e3e79fb1439f3cd6c905d845a4d660cf866a364655ded3709439",
+    "compare_mean_field_dns.py": "05e44a34ed23c5157c148c685233e86175468f1b757371a714e6988fc8037e5e",
+    "mixing_layer_mean_field.py": "6a63f49374bfd9689b14a5a3fa28ad0083af58bc694af8540e55ab9b62cae82c",
+    "mean_field_operators.py": "6fc9733b4ef9380ce1e87d44dfe421492ff04fca7837bbe59048129b0cdbb020",
+    "mean_field_bosons.py": "068d48b9237343a24c6309a40bc42d54a8cebab55a27ee38e4ec9c4a318f4ca6"
+  },
+  "conservation_and_divergence_checks_passed": true,
+  "positivity_preserved": false,
+  "species_ranges_all_steps": {
+    "c1": {
+      "minimum": -0.02243942303647016,
+      "maximum": 1.1163408496471656
+    },
+    "c2": {
+      "minimum": -0.022439423036470226,
+      "maximum": 1.116340849647166
+    },
+    "c3": {
+      "minimum": -0.057692984979761795,
+      "maximum": 0.46892715851506206
+    }
+  },
+  "minimum_reaction_rate": -2.114917577930247,
+  "maximum_negative_rate_fraction": 0.0400390625,
+  "worst_invariant_error": 2.220446049250313e-16,
+  "worst_relative_divergence": 1.4315223072678227e-16,
+  "final": {
+    "relative_divergence": 4.8952643183787046e-17,
+    "max_divergence": 1.7763568394002505e-14,
+    "scalar_mass_error": 0.0,
+    "scalar_mass": 0.2711663464622451,
+    "scalar_minimum": 1.8700615313604586e-21,
+    "scalar_maximum": 0.9999989177298709,
+    "invariant_13_mass": 0.5,
+    "invariant_13_error": 0.0,
+    "invariant_23_mass": 0.5,
+    "invariant_23_error": 0.0,
+    "c1_mass": 0.3134990393867352,
+    "c1_minimum": 1.8700615313604586e-21,
+    "c1_maximum": 0.9999989177298709,
+    "c2_mass": 0.3134990393867352,
+    "c2_minimum": 1.8700615313604612e-21,
+    "c2_maximum": 0.9999989177298708,
+    "c3_mass": 0.18650096061326482,
+    "c3_minimum": 5.41135064584492e-07,
+    "c3_maximum": 0.46892715851506206,
+    "reaction_rate_mean": 0.07263263915638195,
+    "reaction_rate_minimum": 1.870058584707487e-19,
+    "reaction_negative_rate_fraction": 0.0,
+    "wall_normal_velocity": 0.0,
+    "pressure_mean": 6.938893903907228e-18
+  },
+  "scalar_clipping": false,
+  "mass_repair": false
+}

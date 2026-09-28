@@ -5,6 +5,7 @@ The single-site solver uses these coefficients to construct explicit local
 Fock-space generators after mean-field decoupling. No DNS routine is used.
 """
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 from scipy.sparse import coo_matrix
@@ -14,14 +15,19 @@ from scipy.sparse import coo_matrix
 class Layout:
     n: int
     boundary_y: str
+    scalar_species: int = 1
 
     @property
+    def scalar_fields(self):
+        return ("c",) if self.scalar_species == 1 else ("c1", "c2", "c3")
+
+    @cached_property
     def shapes(self):
         n = self.n
         return {"u": (n, n), "v": (n+1 if self.boundary_y == "free-slip" else n, n),
-                "phi": (n, n), "c": (n, n)}
+                "phi": (n, n), **{field: (n, n) for field in self.scalar_fields}}
 
-    @property
+    @cached_property
     def slices(self):
         result, offset = {}, 0
         for field, shape in self.shapes.items():
@@ -30,9 +36,14 @@ class Layout:
             offset += size
         return result
 
-    @property
+    @cached_property
     def size(self):
-        return self.slices["c"].stop
+        return self.scalar_slice.stop
+
+    @cached_property
+    def scalar_slice(self):
+        return slice(self.slices[self.scalar_fields[0]].start,
+                     self.slices[self.scalar_fields[-1]].stop)
 
     def index(self, field, j, i):
         # Homogeneous wall v operators are eliminated, not evolved and clamped.
@@ -48,7 +59,11 @@ class Layout:
     def pack(self, au, av, ac, aphi=None):
         if aphi is None:
             aphi = np.zeros(self.shapes["phi"])
-        fields = {"u": au, "v": av, "phi": aphi, "c": ac}
+        scalars = [ac] if self.scalar_species == 1 else ac
+        if len(scalars) != len(self.scalar_fields):
+            raise ValueError("incorrect number of scalar fields")
+        fields = {"u": au, "v": av, "phi": aphi,
+                  **dict(zip(self.scalar_fields, scalars))}
         for name, value in fields.items():
             if value.shape != self.shapes[name]:
                 raise ValueError(f"incorrect {name} shape: {value.shape}")
@@ -158,16 +173,16 @@ class MeanFieldOperators:
 
     def __init__(self, config):
         n = config.n
-        self.layout = layout = Layout(n, config.boundary_y)
+        self.layout = layout = Layout(n, config.boundary_y, config.scalar_species)
         scales = {"u": config.velocity_scale, "v": config.velocity_scale,
-                  "phi": config.pressure_scale, "c": config.scalar_scale}
+                  "phi": config.pressure_scale,
+                  **{field: config.scalar_scale for field in layout.scalar_fields}}
         pred, press, corr = [GeneratorBuilder(layout, scales) for _ in range(3)]
         channel = config.boundary_y == "free-slip"
         for j in range(n):
             for i in range(n):
-                u, c, p = ("u", j, i), ("c", j, i), ("phi", j, i)
+                u, p = ("u", j, i), ("phi", j, i)
                 pred.laplacian(u, n*n/config.reynolds)
-                pred.laplacian(c, n*n/config.peclet)
                 press.laplacian(p, n*n)
                 # -div(uu) at u: east/west squares, north/south uv products.
                 ue, uw = [u, ("u", j, i+1)], [("u", j, i-1), u]
@@ -181,12 +196,22 @@ class MeanFieldOperators:
                                  [("v", j, i-1), ("v", j, i)])
                 # -div(uc), with each internal flux entering adjacent cells
                 # with opposite signs. No later scalar-mass repair is needed.
-                pred.product(c, -n, [("u", j, i+1)], [c, ("c", j, i+1)])
-                pred.product(c, n, [("u", j, i)], [("c", j, i-1), c])
-                if not channel or j < n-1:
-                    pred.product(c, -n, [("v", j+1, i)], [c, ("c", j+1, i)])
-                if not channel or j > 0:
-                    pred.product(c, n, [("v", j, i)], [("c", j-1, i), c])
+                for field in layout.scalar_fields:
+                    c = (field, j, i)
+                    pred.laplacian(c, n*n/config.peclet)
+                    pred.product(c, -n, [("u", j, i+1)], [c, (field, j, i+1)])
+                    pred.product(c, n, [("u", j, i)], [(field, j, i-1), c])
+                    if not channel or j < n-1:
+                        pred.product(c, -n, [("v", j+1, i)], [c, (field, j+1, i)])
+                    if not channel or j > 0:
+                        pred.product(c, n, [("v", j, i)], [(field, j-1, i), c])
+                if config.scalar_species == 3:
+                    # G_R = Da*s_c*(-a_1^dagger-a_2^dagger+a_3^dagger)*a_1*a_2.
+                    # Decoupling includes all creation, annihilation, and identity
+                    # terms; reaction is integrated on the kets in the predictor.
+                    for field, sign in (("c1", -1), ("c2", -1), ("c3", 1)):
+                        pred.term((field, j, i), sign*config.damkohler,
+                                  ("c1", j, i), ("c2", j, i))
                 # d_tau alpha_phi = L alpha_phi - (s_u/s_phi) D alpha_vel.
                 for coefficient, source in ((-n, ("u", j, i+1)), (n, u),
                                             (-n, ("v", j+1, i)), (n, ("v", j, i))):
@@ -219,4 +244,3 @@ class MeanFieldOperators:
         return {"amplitude_modes": self.layout.size,
                 **{name: getattr(self, name).summary()
                    for name in ("predictor", "pressure", "correction")}}
-

@@ -1,0 +1,6 @@
+{
+  "state": "complete",
+  "mean_field_source": "/ix/jmendoza-arenas/hia21/mixing-layer/mean-field-sites64-re100-pe100-da1-three-species-rk4-delta001875-nb12-ptol1e7/mean_field_snapshots.npz",
+  "completed_steps": 1040,
+  "report": "RUN_REPORT.md"
+}
