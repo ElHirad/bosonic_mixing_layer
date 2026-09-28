@@ -12,6 +12,13 @@ the eight saved field snapshots, without changing/rerunning the trajectories.
 Both averaging conventions for the signed c1/c2 covariance are documented;
 CSV time series, y profiles, PNG/PDF figures, and input provenance are included.
 
+The [per-snapshot comparison index](./snapshot_comparisons/README.md) now
+provides separate **shear-stress vs y** and **unmixedness vs y** figures for
+all eight saved times, with all three Da and solid DNS/dashed MF. Seventy-two
+additional field figures cover C1, C2, and vorticity at every Da/time; each
+has DNS, MF, and signed MF−DNS panels. Only x averaging is used for the y
+profiles, without y/time averaging or concentration clipping.
+
 The user clarified **MF**, not the original MPS/TDVP solver, and requested
 64×64, Re=Pe=100, RK4, and positive/negative concentration tracking. Da=1,10,100
 and c1+c2 -> c3 are retained. All older datasets and failed runs are preserved.

@@ -1,0 +1,863 @@
+{
+  "sources": [
+    {
+      "damkohler": 1,
+      "config": {
+        "n": 64,
+        "reynolds": 100.0,
+        "peclet": 100.0,
+        "dt": 0.000625,
+        "final_time": 0.65,
+        "boundary_y": "free-slip",
+        "shear_center": 0.5,
+        "middle_fraction": 0.3,
+        "transition": 0.01875,
+        "kh_width": 0.12,
+        "kh_mode": 2,
+        "kh_amplitude": 2.5,
+        "secondary_mode": 1,
+        "secondary_amplitude": 0.5,
+        "phase": 0.0,
+        "velocity_scale": 8.0,
+        "pressure_scale": 4.0,
+        "scalar_scale": 4.0,
+        "boson_cutoff": 12,
+        "predictor_substeps": 8,
+        "correction_substeps": 8,
+        "pressure_cfl": 0.125,
+        "pressure_tolerance": 1e-07,
+        "pressure_max_steps": 48000,
+        "scalar_species": 3,
+        "damkohler": 1.0,
+        "time_integrator": "rk4"
+      },
+      "mf_fingerprint": "1066c54726b361ccf9cef6a8fd8c98e0c5f0e445fc2ea477a29a59782d7857e6",
+      "files": {
+        "MF": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da1_reaction_rk4_ptol1e7/mean_field_snapshots.npz",
+          "sha256": "7d4ebc27da57bbebd2b41f2a5a45bd3e1e39af5e1ea7165200c2f4a79c34acee"
+        },
+        "DNS": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da1_reaction_rk4_ptol1e7/dns_matched_snapshots.npz",
+          "sha256": "649c7477fc2d39542722d5c910f620ec41a13213e07ab301a3dca61356afe126"
+        }
+      },
+      "mf_validation_recomputed": true,
+      "dns_snapshot_diagnostics_recomputed": true
+    },
+    {
+      "damkohler": 10,
+      "config": {
+        "n": 64,
+        "reynolds": 100.0,
+        "peclet": 100.0,
+        "dt": 0.000625,
+        "final_time": 0.65,
+        "boundary_y": "free-slip",
+        "shear_center": 0.5,
+        "middle_fraction": 0.3,
+        "transition": 0.01875,
+        "kh_width": 0.12,
+        "kh_mode": 2,
+        "kh_amplitude": 2.5,
+        "secondary_mode": 1,
+        "secondary_amplitude": 0.5,
+        "phase": 0.0,
+        "velocity_scale": 8.0,
+        "pressure_scale": 4.0,
+        "scalar_scale": 4.0,
+        "boson_cutoff": 12,
+        "predictor_substeps": 8,
+        "correction_substeps": 8,
+        "pressure_cfl": 0.125,
+        "pressure_tolerance": 1e-07,
+        "pressure_max_steps": 48000,
+        "scalar_species": 3,
+        "damkohler": 10.0,
+        "time_integrator": "rk4"
+      },
+      "mf_fingerprint": "ff04e6123b16f5c42fe4fd15466110ed6d2f0aa6c046e11579d327fc059b0a14",
+      "files": {
+        "MF": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da10_reaction_rk4_ptol1e7/mean_field_snapshots.npz",
+          "sha256": "6503570e6c5af9549b807485ad4cdba9500c4f3b19f839035cb86ac66f42dc59"
+        },
+        "DNS": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da10_reaction_rk4_ptol1e7/dns_matched_snapshots.npz",
+          "sha256": "8ebf5aaf8f54f7c205fdef69cbb80a606e9a3f491b5418dc7205f383885d67b0"
+        }
+      },
+      "mf_validation_recomputed": true,
+      "dns_snapshot_diagnostics_recomputed": true
+    },
+    {
+      "damkohler": 100,
+      "config": {
+        "n": 64,
+        "reynolds": 100.0,
+        "peclet": 100.0,
+        "dt": 0.000625,
+        "final_time": 0.65,
+        "boundary_y": "free-slip",
+        "shear_center": 0.5,
+        "middle_fraction": 0.3,
+        "transition": 0.01875,
+        "kh_width": 0.12,
+        "kh_mode": 2,
+        "kh_amplitude": 2.5,
+        "secondary_mode": 1,
+        "secondary_amplitude": 0.5,
+        "phase": 0.0,
+        "velocity_scale": 8.0,
+        "pressure_scale": 4.0,
+        "scalar_scale": 4.0,
+        "boson_cutoff": 12,
+        "predictor_substeps": 8,
+        "correction_substeps": 8,
+        "pressure_cfl": 0.125,
+        "pressure_tolerance": 1e-07,
+        "pressure_max_steps": 48000,
+        "scalar_species": 3,
+        "damkohler": 100.0,
+        "time_integrator": "rk4"
+      },
+      "mf_fingerprint": "90c632ffccf8230dc008eac26dbc7a6e3b4b4909e766a71f4b12a85555ead0c8",
+      "files": {
+        "MF": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da100_reaction_rk4_ptol1e7/mean_field_snapshots.npz",
+          "sha256": "6e89c9c0746e318e883513fb4763bb97ea04b1cf9a5398ef905ec4d296a94009"
+        },
+        "DNS": {
+          "path": "/ihome/jmendoza-arenas/hia21/mixing_layer/outputs/mean_field_sites_64x64_re100_pe100_da100_reaction_rk4_ptol1e7/dns_matched_snapshots.npz",
+          "sha256": "d950b8116b3c38f0cc21e314070648b78f494ec1418819d1fd2ee2f059c9037f"
+        }
+      },
+      "mf_validation_recomputed": true,
+      "dns_snapshot_diagnostics_recomputed": true
+    }
+  ],
+  "times": [
+    0.0,
+    0.093125,
+    0.185625,
+    0.27875,
+    0.37125,
+    0.464375,
+    0.556875,
+    0.65
+  ],
+  "files": [
+    {
+      "kind": "shear_stress",
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "profiles/shear_stress/snapshot_00_step_0000"
+    },
+    {
+      "kind": "unmixedness",
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "profiles/unmixedness/snapshot_00_step_0000"
+    },
+    {
+      "kind": "shear_stress",
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "profiles/shear_stress/snapshot_01_step_0149"
+    },
+    {
+      "kind": "unmixedness",
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "profiles/unmixedness/snapshot_01_step_0149"
+    },
+    {
+      "kind": "shear_stress",
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "profiles/shear_stress/snapshot_02_step_0297"
+    },
+    {
+      "kind": "unmixedness",
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "profiles/unmixedness/snapshot_02_step_0297"
+    },
+    {
+      "kind": "shear_stress",
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "profiles/shear_stress/snapshot_03_step_0446"
+    },
+    {
+      "kind": "unmixedness",
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "profiles/unmixedness/snapshot_03_step_0446"
+    },
+    {
+      "kind": "shear_stress",
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "profiles/shear_stress/snapshot_04_step_0594"
+    },
+    {
+      "kind": "unmixedness",
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "profiles/unmixedness/snapshot_04_step_0594"
+    },
+    {
+      "kind": "shear_stress",
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "profiles/shear_stress/snapshot_05_step_0743"
+    },
+    {
+      "kind": "unmixedness",
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "profiles/unmixedness/snapshot_05_step_0743"
+    },
+    {
+      "kind": "shear_stress",
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "profiles/shear_stress/snapshot_06_step_0891"
+    },
+    {
+      "kind": "unmixedness",
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "profiles/unmixedness/snapshot_06_step_0891"
+    },
+    {
+      "kind": "shear_stress",
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "profiles/shear_stress/snapshot_07_step_1040"
+    },
+    {
+      "kind": "unmixedness",
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "profiles/unmixedness/snapshot_07_step_1040"
+    },
+    {
+      "kind": "c1",
+      "Da": 1,
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "fields/da1/c1/snapshot_00_step_0000"
+    },
+    {
+      "kind": "c2",
+      "Da": 1,
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "fields/da1/c2/snapshot_00_step_0000"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 1,
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "fields/da1/vorticity/snapshot_00_step_0000"
+    },
+    {
+      "kind": "c1",
+      "Da": 1,
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "fields/da1/c1/snapshot_01_step_0149"
+    },
+    {
+      "kind": "c2",
+      "Da": 1,
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "fields/da1/c2/snapshot_01_step_0149"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 1,
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "fields/da1/vorticity/snapshot_01_step_0149"
+    },
+    {
+      "kind": "c1",
+      "Da": 1,
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "fields/da1/c1/snapshot_02_step_0297"
+    },
+    {
+      "kind": "c2",
+      "Da": 1,
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "fields/da1/c2/snapshot_02_step_0297"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 1,
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "fields/da1/vorticity/snapshot_02_step_0297"
+    },
+    {
+      "kind": "c1",
+      "Da": 1,
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "fields/da1/c1/snapshot_03_step_0446"
+    },
+    {
+      "kind": "c2",
+      "Da": 1,
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "fields/da1/c2/snapshot_03_step_0446"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 1,
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "fields/da1/vorticity/snapshot_03_step_0446"
+    },
+    {
+      "kind": "c1",
+      "Da": 1,
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "fields/da1/c1/snapshot_04_step_0594"
+    },
+    {
+      "kind": "c2",
+      "Da": 1,
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "fields/da1/c2/snapshot_04_step_0594"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 1,
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "fields/da1/vorticity/snapshot_04_step_0594"
+    },
+    {
+      "kind": "c1",
+      "Da": 1,
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "fields/da1/c1/snapshot_05_step_0743"
+    },
+    {
+      "kind": "c2",
+      "Da": 1,
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "fields/da1/c2/snapshot_05_step_0743"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 1,
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "fields/da1/vorticity/snapshot_05_step_0743"
+    },
+    {
+      "kind": "c1",
+      "Da": 1,
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "fields/da1/c1/snapshot_06_step_0891"
+    },
+    {
+      "kind": "c2",
+      "Da": 1,
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "fields/da1/c2/snapshot_06_step_0891"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 1,
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "fields/da1/vorticity/snapshot_06_step_0891"
+    },
+    {
+      "kind": "c1",
+      "Da": 1,
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "fields/da1/c1/snapshot_07_step_1040"
+    },
+    {
+      "kind": "c2",
+      "Da": 1,
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "fields/da1/c2/snapshot_07_step_1040"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 1,
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "fields/da1/vorticity/snapshot_07_step_1040"
+    },
+    {
+      "kind": "c1",
+      "Da": 10,
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "fields/da10/c1/snapshot_00_step_0000"
+    },
+    {
+      "kind": "c2",
+      "Da": 10,
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "fields/da10/c2/snapshot_00_step_0000"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 10,
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "fields/da10/vorticity/snapshot_00_step_0000"
+    },
+    {
+      "kind": "c1",
+      "Da": 10,
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "fields/da10/c1/snapshot_01_step_0149"
+    },
+    {
+      "kind": "c2",
+      "Da": 10,
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "fields/da10/c2/snapshot_01_step_0149"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 10,
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "fields/da10/vorticity/snapshot_01_step_0149"
+    },
+    {
+      "kind": "c1",
+      "Da": 10,
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "fields/da10/c1/snapshot_02_step_0297"
+    },
+    {
+      "kind": "c2",
+      "Da": 10,
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "fields/da10/c2/snapshot_02_step_0297"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 10,
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "fields/da10/vorticity/snapshot_02_step_0297"
+    },
+    {
+      "kind": "c1",
+      "Da": 10,
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "fields/da10/c1/snapshot_03_step_0446"
+    },
+    {
+      "kind": "c2",
+      "Da": 10,
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "fields/da10/c2/snapshot_03_step_0446"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 10,
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "fields/da10/vorticity/snapshot_03_step_0446"
+    },
+    {
+      "kind": "c1",
+      "Da": 10,
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "fields/da10/c1/snapshot_04_step_0594"
+    },
+    {
+      "kind": "c2",
+      "Da": 10,
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "fields/da10/c2/snapshot_04_step_0594"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 10,
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "fields/da10/vorticity/snapshot_04_step_0594"
+    },
+    {
+      "kind": "c1",
+      "Da": 10,
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "fields/da10/c1/snapshot_05_step_0743"
+    },
+    {
+      "kind": "c2",
+      "Da": 10,
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "fields/da10/c2/snapshot_05_step_0743"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 10,
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "fields/da10/vorticity/snapshot_05_step_0743"
+    },
+    {
+      "kind": "c1",
+      "Da": 10,
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "fields/da10/c1/snapshot_06_step_0891"
+    },
+    {
+      "kind": "c2",
+      "Da": 10,
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "fields/da10/c2/snapshot_06_step_0891"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 10,
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "fields/da10/vorticity/snapshot_06_step_0891"
+    },
+    {
+      "kind": "c1",
+      "Da": 10,
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "fields/da10/c1/snapshot_07_step_1040"
+    },
+    {
+      "kind": "c2",
+      "Da": 10,
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "fields/da10/c2/snapshot_07_step_1040"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 10,
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "fields/da10/vorticity/snapshot_07_step_1040"
+    },
+    {
+      "kind": "c1",
+      "Da": 100,
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "fields/da100/c1/snapshot_00_step_0000"
+    },
+    {
+      "kind": "c2",
+      "Da": 100,
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "fields/da100/c2/snapshot_00_step_0000"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 100,
+      "snapshot": 0,
+      "step": 0,
+      "time": 0.0,
+      "base": "fields/da100/vorticity/snapshot_00_step_0000"
+    },
+    {
+      "kind": "c1",
+      "Da": 100,
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "fields/da100/c1/snapshot_01_step_0149"
+    },
+    {
+      "kind": "c2",
+      "Da": 100,
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "fields/da100/c2/snapshot_01_step_0149"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 100,
+      "snapshot": 1,
+      "step": 149,
+      "time": 0.093125,
+      "base": "fields/da100/vorticity/snapshot_01_step_0149"
+    },
+    {
+      "kind": "c1",
+      "Da": 100,
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "fields/da100/c1/snapshot_02_step_0297"
+    },
+    {
+      "kind": "c2",
+      "Da": 100,
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "fields/da100/c2/snapshot_02_step_0297"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 100,
+      "snapshot": 2,
+      "step": 297,
+      "time": 0.185625,
+      "base": "fields/da100/vorticity/snapshot_02_step_0297"
+    },
+    {
+      "kind": "c1",
+      "Da": 100,
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "fields/da100/c1/snapshot_03_step_0446"
+    },
+    {
+      "kind": "c2",
+      "Da": 100,
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "fields/da100/c2/snapshot_03_step_0446"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 100,
+      "snapshot": 3,
+      "step": 446,
+      "time": 0.27875,
+      "base": "fields/da100/vorticity/snapshot_03_step_0446"
+    },
+    {
+      "kind": "c1",
+      "Da": 100,
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "fields/da100/c1/snapshot_04_step_0594"
+    },
+    {
+      "kind": "c2",
+      "Da": 100,
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "fields/da100/c2/snapshot_04_step_0594"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 100,
+      "snapshot": 4,
+      "step": 594,
+      "time": 0.37125,
+      "base": "fields/da100/vorticity/snapshot_04_step_0594"
+    },
+    {
+      "kind": "c1",
+      "Da": 100,
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "fields/da100/c1/snapshot_05_step_0743"
+    },
+    {
+      "kind": "c2",
+      "Da": 100,
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "fields/da100/c2/snapshot_05_step_0743"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 100,
+      "snapshot": 5,
+      "step": 743,
+      "time": 0.464375,
+      "base": "fields/da100/vorticity/snapshot_05_step_0743"
+    },
+    {
+      "kind": "c1",
+      "Da": 100,
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "fields/da100/c1/snapshot_06_step_0891"
+    },
+    {
+      "kind": "c2",
+      "Da": 100,
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "fields/da100/c2/snapshot_06_step_0891"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 100,
+      "snapshot": 6,
+      "step": 891,
+      "time": 0.556875,
+      "base": "fields/da100/vorticity/snapshot_06_step_0891"
+    },
+    {
+      "kind": "c1",
+      "Da": 100,
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "fields/da100/c1/snapshot_07_step_1040"
+    },
+    {
+      "kind": "c2",
+      "Da": 100,
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "fields/da100/c2/snapshot_07_step_1040"
+    },
+    {
+      "kind": "vorticity",
+      "Da": 100,
+      "snapshot": 7,
+      "step": 1040,
+      "time": 0.65,
+      "base": "fields/da100/vorticity/snapshot_07_step_1040"
+    }
+  ],
+  "profile_limits": {
+    "shear_stress": [
+      -0.15176693009084788,
+      0.11307920357652124
+    ],
+    "unmixedness": [
+      -0.16235873940893905,
+      0.012026577581579682
+    ]
+  },
+  "line_styles": {
+    "DNS": "-",
+    "MF": "--"
+  },
+  "difference": "MF - DNS",
+  "averaging": "x mean at fixed y and time; no y/time averaging",
+  "scalar_clipping": false,
+  "simulation_rerun": false,
+  "field_color_scales": "Shared across Da and methods; vorticity per time, all other scales across time",
+  "postprocessor_sha256": {
+    "plot_reaction_snapshot_comparisons.py": "22493bd1efba4f422659ffd41d71f379e7f69a1e17b8179a06c3686c15abe896",
+    "plot_reaction_statistics.py": "dd943923423df5ba07f9c2c2b959e2d7a89f74fceda7a3e064ee0da6c92d496a",
+    "plot_mean_field_results.py": "1dad7840acf71a941664b67efbda4bb38e787cf11d900815a2116fc15f25a0c2"
+  }
+}
