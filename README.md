@@ -37,13 +37,15 @@ normal Reynolds stresses, 18.4% for signed shear stress, 0.18% for vorticity
 thickness, and 0.40–0.51% for full-domain scalar covariance. Neither numerical
 validation nor agreement with DNS establishes positivity or convergence.
 
-The [per-snapshot y profiles and field comparisons](./outputs/reaction_64x64_re100_pe100_rk4_series/snapshot_comparisons/README.md)
-provide **shear stress only** and signed unmixedness versus y, each saved in a
-separate file at each of the eight output times. Every profile includes all
-three Da with solid DNS and dashed MF. There are also separate C1, C2, and
-vorticity figures for every Da/time, each showing DNS, MF, and signed MF−DNS.
+The [combined all-snapshot comparisons](./outputs/reaction_64x64_re100_pe100_rk4_series/snapshot_comparisons/README.md)
+provide **five figures**, one each for shear stress, unmixedness, C1, C2, and
+vorticity. Each contains all eight saved times and all three Da cases. The
+y-profile panels use solid DNS and dashed MF. Each field figure groups DNS,
+MF, and signed MF−DNS into three-row blocks for Da=1,10,100, with time along
+the columns. The earlier snapshot-per-file plots and CSVs have been removed;
+the simulation snapshots and consolidated CSV data remain unchanged.
 No simulations are rerun; `plot_reaction_snapshot_comparisons.py` measures
-the validated snapshots and exports PNG/PDF figures and CSV data.
+the validated snapshots and exports five combined PNG figures and CSV data.
 
 See the [equations, operator derivation, limitations, and cluster commands](./REACTING_MIXING_LAYER.md).
 The earlier 128×128 DNS checks completed 2,080 steps to t=0.65 with dt=0.0003125

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-snapshot y profiles and DNS/MF/signed-difference field figures.
+"""Five combined, all-snapshot y-profile and DNS/MF/difference figures.
 
 Only existing snapshots are measured. Neither simulation is advanced.
 """
@@ -30,73 +30,120 @@ PROFILE_LABELS = {
 }
 
 
-def snapshot_name(index, step):
-    return f"snapshot_{index:02d}_step_{step:04d}"
-
-
 def save_figure(fig, base):
     base.parent.mkdir(parents=True, exist_ok=True)
-    for extension in ("png", "pdf"):
-        fig.savefig(base.with_suffix("."+extension), dpi=180)
+    fig.savefig(base.with_suffix(".png"), dpi=180)
     plt.close(fig)
 
 
-def profile_figure(rows, quantity, time, limits):
-    """One x-averaged profile at fixed time, with all three Da comparisons."""
+def profile_figure(rows, quantity, times, limits):
+    """All saved times in one figure; all three Da comparisons in each panel."""
     if quantity not in PROFILE_LABELS:
         raise ValueError("only shear_stress and unmixedness profiles are requested")
-    fig, ax = plt.subplots(figsize=(8.8, 5.8))
-    for index, da in enumerate(DAMKOHLERS):
-        for method in ("DNS", "MF"):
-            selected = sorted((r for r in rows if r["Da"] == da and r["method"] == method), key=lambda r: r["y"])
-            if not selected or any(r["time"] != time for r in selected):
-                plt.close(fig)
-                raise ValueError("all six profiles at exactly one snapshot time are required")
-            ax.plot([r["y"] for r in selected], [r[quantity] for r in selected],
-                    color=COLORS[da], linestyle=STYLES[method], linewidth=1.9,
-                    marker=MARKERS[da], markersize=4.8,
-                    markevery=list(range(4*index, len(selected), 12)),
-                    markerfacecolor=COLORS[da] if method == "DNS" else "white",
-                    label=f"Da = {da}, {method}")
+    columns = min(4, len(times))
+    panel_rows = (len(times)+columns-1)//columns
+    fig, axes = plt.subplots(panel_rows, columns, figsize=(4.3*columns, 3.8*panel_rows+1.2),
+                             sharex=True, sharey=True, squeeze=False)
+    for k, time in enumerate(times):
+        ax = axes.flat[k]
+        for index, da in enumerate(DAMKOHLERS):
+            for method in ("DNS", "MF"):
+                selected = sorted((r for r in rows if r["Da"] == da and r["method"] == method
+                                   and r["time"] == time), key=lambda r: r["y"])
+                if not selected:
+                    plt.close(fig)
+                    raise ValueError("all six profiles at every snapshot time are required")
+                ax.plot([r["y"] for r in selected], [r[quantity] for r in selected],
+                        color=COLORS[da], linestyle=STYLES[method], linewidth=1.8,
+                        marker=MARKERS[da], markersize=3.8,
+                        markevery=list(range(4*index, len(selected), 12)),
+                        markerfacecolor=COLORS[da] if method == "DNS" else "white",
+                        label=f"Da = {da}, {method}")
+        ax.set(xlabel="y", xlim=(0, 1), ylim=limits, title=f"t = {time:.6f}")
+        if k % columns == 0:
+            ax.set_ylabel(PROFILE_LABELS[quantity], fontsize=10)
+        ax.grid(alpha=.23)
+    for ax in list(axes.flat)[len(times):]:
+        ax.set_visible(False)
     title = "Reynolds shear stress" if quantity == "shear_stress" else "Unmixedness (signed covariance)"
-    ax.set(xlabel="y", ylabel=PROFILE_LABELS[quantity], xlim=(0, 1), ylim=limits,
-           title=f"{title} vs y\n64×64, Re = Pe = 100, RK4; t = {time:.6f}")
-    ax.grid(alpha=.23)
-    ax.legend(ncol=3, fontsize=9, loc="upper center", bbox_to_anchor=(.5, -.18), frameon=False)
+    fig.suptitle(f"{title} vs y — all saved snapshots\n64×64, Re = Pe = 100, RK4", fontsize=15)
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, ncol=3, fontsize=10, loc="lower center", bbox_to_anchor=(.5, .038), frameon=False)
     fig.text(.5, .015, "Solid DNS; dashed MF. Streamwise means at fixed y; no y or time averaging."
              +( " Da shear-stress curves overlap." if quantity == "shear_stress" else " Covariance is not sign-reversed."),
              ha="center", fontsize=8)
-    fig.tight_layout(rect=(0, .055, 1, 1))
+    fig.tight_layout(rect=(0, .13, 1, .91))
     return fig
 
 
-def field_figure(data, config, field, index, bounds, error_limit):
-    """DNS, MF, and MF-DNS at one time; matched physical color scales."""
+def field_figure(cases, field):
+    """All times, three Da, DNS/MF/difference: one 9-row comparison sheet."""
     if field not in FIELDS:
         raise ValueError("expected c1, c2, or vorticity")
-    dns, mf = data["DNS"][field][index], data["MF"][field][index]
-    if dns.shape != mf.shape or not np.isfinite(dns).all() or not np.isfinite(mf).all():
-        raise ValueError("finite, matching field arrays required")
-    difference = mf-dns
-    relative_l2 = float(np.linalg.norm(difference)/max(np.linalg.norm(dns), 1e-30))
-    fig, axes = plt.subplots(1, 3, figsize=(12.8, 5.0), layout="constrained")
-    artists = []
-    for i, (ax, values, title) in enumerate(zip(axes, (dns, mf, difference), ("DNS", "MF", "MF − DNS"))):
-        x, y, array = field_coordinates(values, config, field)
-        artist = ax.pcolormesh(x, y, array, shading="nearest", rasterized=True,
-                              cmap="RdBu_r" if field == "vorticity" or i == 2 else "viridis",
-                              vmin=bounds[0] if i < 2 else -error_limit,
-                              vmax=bounds[1] if i < 2 else error_limit)
-        ax.set(xlabel="x", ylabel="y", xlim=(0, 1), ylim=(0, 1), aspect="equal",
-               title=title if i < 2 else f"{title}\nRelative L2 = {100*relative_l2:.3g}%")
-        artists.append(artist)
+    times = cases[DAMKOHLERS[0]][1]["DNS"]["times"]
+    fig, axes = plt.subplots(9, len(times), figsize=(2.65*len(times)+1.4, 22.5),
+                             sharex=True, sharey=True, squeeze=False)
+    fig.subplots_adjust(left=.065, right=.985, top=.948,
+                        bottom=.14 if field == "vorticity" else .085, wspace=.13, hspace=.22)
+    metrics, physical_artists = [], {}
+    for case_index, da in enumerate(DAMKOHLERS):
+        config, data = cases[da]
+        if not np.array_equal(times, data["DNS"]["times"]) or not np.array_equal(times, data["MF"]["times"]):
+            plt.close(fig)
+            raise ValueError("all cases and methods must share snapshot times")
+        references = comparison(data["MF"], data["DNS"])
+        for k, time in enumerate(times):
+            bounds, error_limit = color_limits(cases, field, k)
+            dns, mf = data["DNS"][field][k], data["MF"][field][k]
+            difference = mf-dns
+            relative_l2 = float(np.linalg.norm(difference)/max(np.linalg.norm(dns), 1e-30))
+            if not np.isclose(relative_l2, references[k][field+"_relative_l2"], rtol=1e-13, atol=1e-14):
+                plt.close(fig)
+                raise ValueError("field comparison metric mismatch")
+            metrics.append(dict(Da=da, snapshot=k, step=round(time/config.dt), time=float(time), field=field,
+                                relative_l2=relative_l2, max_abs_difference=float(np.max(np.abs(difference))),
+                                physical_vmin=bounds[0], physical_vmax=bounds[1], difference_limit=error_limit))
+            for offset, (values, method) in enumerate(zip((dns, mf, difference), ("DNS", "MF", "MF − DNS"))):
+                row = 3*case_index+offset
+                ax = axes[row, k]
+                x, y, array = field_coordinates(values, config, field)
+                artist = ax.pcolormesh(x, y, array, shading="nearest", rasterized=True,
+                                      cmap="RdBu_r" if field == "vorticity" or offset == 2 else "viridis",
+                                      vmin=bounds[0] if offset < 2 else -error_limit,
+                                      vmax=bounds[1] if offset < 2 else error_limit)
+                ax.set(xlim=(0, 1), ylim=(0, 1), aspect="equal", xticks=[0, .5, 1], yticks=[0, .5, 1])
+                ax.tick_params(labelsize=7)
+                if k == 0:
+                    ax.set_ylabel(f"Da = {da}\n{method}\ny", fontsize=10)
+                if row == 0:
+                    ax.set_title(f"t = {time:.6f}", fontsize=10)
+                if row == 8:
+                    ax.set_xlabel("x", fontsize=9)
+                if offset == 2:
+                    error_artist = artist
+                    ax.text(.03, .04, f"L2: {100*relative_l2:.3g}%", transform=ax.transAxes,
+                            fontsize=8, bbox=dict(facecolor="white", alpha=.8, edgecolor="none", pad=1))
+                else:
+                    physical_artists[k] = artist
     label = "Vorticity" if field == "vorticity" else field.upper()
-    fig.colorbar(artists[0], ax=axes[:2], orientation="horizontal", shrink=.8, pad=.08).set_label(label)
-    fig.colorbar(artists[2], ax=axes[2], orientation="horizontal", shrink=.9, pad=.08).set_label(f"Signed {label} difference")
-    time = data["DNS"]["times"][index]
-    fig.suptitle(f"{label}: DNS / MF / signed difference — Da = {config.damkohler:g}\n"
-                 f"{config.n}×{config.n}, Re = Pe = 100, RK4; t = {time:.6f}")
-    return fig, relative_l2
+    if field == "vorticity":
+        for k, time in enumerate(times):
+            pos = axes[-1, k].get_position()
+            cax = fig.add_axes([pos.x0, .077, pos.width, .009])
+            limit = physical_artists[k].get_clim()[1]
+            bar = fig.colorbar(physical_artists[k], cax=cax, orientation="horizontal", ticks=[-limit, 0, limit])
+            bar.ax.set_xticklabels([f"{-limit:.1f}", "0", f"{limit:.1f}"])
+            bar.ax.tick_params(labelsize=7)
+            bar.set_label(f"Vorticity at t={time:.6f}", fontsize=8)
+        error_axes = fig.add_axes([.32, .026, .36, .009])
+    else:
+        value_axes = fig.add_axes([.12, .033, .32, .009])
+        fig.colorbar(physical_artists[0], cax=value_axes, orientation="horizontal").set_label(label)
+        error_axes = fig.add_axes([.60, .033, .32, .009])
+    fig.colorbar(error_artist, cax=error_axes, orientation="horizontal").set_label(f"Signed {label} difference (MF − DNS)")
+    fig.suptitle(f"{label}: all eight saved snapshots, all three Damkohler cases\n"
+                 "64×64, Re = Pe = 100, RK4; DNS / MF / signed MF − DNS in each three-row block", fontsize=16)
+    return fig, metrics
 
 
 def color_limits(cases, field, index):
@@ -150,50 +197,21 @@ def generate(input_root, output_dir):
         margin = .08*max(high-low, 1e-12)
         limits[quantity] = (low-margin, high+margin)
     files, metrics = [], []
-    profile_links = []
-    for k, time in enumerate(times):
-        step = round(time/config.dt)
-        name = snapshot_name(k, step)
-        selected = [row for row in profiles if row["snapshot"] == k]
-        for quantity in PROFILE_LABELS:
-            base = output_dir/"profiles"/quantity/name
-            save_figure(profile_figure(selected, quantity, time, limits[quantity]), base)
-            write_csv(base.with_suffix(".csv"), [
-                {key: value for key, value in row.items() if key not in PROFILE_LABELS or key == quantity}
-                for row in selected])
-            files.append(dict(kind=quantity, snapshot=k, step=step, time=float(time),
-                              base=str(base.relative_to(output_dir))))
-        profile_links.append(f"| {step} | {time:.6f} | [PNG](./profiles/shear_stress/{name}.png) / "
-                             f"[PDF](./profiles/shear_stress/{name}.pdf) | [PNG](./profiles/unmixedness/{name}.png) / "
-                             f"[PDF](./profiles/unmixedness/{name}.pdf) |")
-    print("Saved eight shear-stress and eight unmixedness profile figures (PNG/PDF/CSV).", flush=True)
-    field_sections = []
-    for da, (config, data) in cases.items():
-        references = comparison(data["MF"], data["DNS"])
-        table = []
-        for k, time in enumerate(times):
-            step = round(time/config.dt)
-            name = snapshot_name(k, step)
-            links = []
-            for field in FIELDS:
-                bounds, error = color_limits(cases, field, k)
-                fig, relative_l2 = field_figure(data, config, field, k, bounds, error)
-                if not np.isclose(relative_l2, references[k][field+"_relative_l2"], rtol=1e-13, atol=1e-14):
-                    raise ValueError("field comparison metric mismatch")
-                base = output_dir/"fields"/f"da{da}"/field/name
-                save_figure(fig, base)
-                relative = str(base.relative_to(output_dir))
-                files.append(dict(kind=field, Da=da, snapshot=k, step=step, time=float(time), base=relative))
-                metrics.append(dict(Da=da, snapshot=k, step=step, time=float(time), field=field,
-                                    relative_l2=relative_l2, max_abs_difference=references[k][field+"_max_abs"],
-                                    physical_vmin=bounds[0], physical_vmax=bounds[1], difference_limit=error))
-                links.append(f"[PNG](./{relative}.png) / [PDF](./{relative}.pdf)")
-            table.append(f"| {step} | {time:.6f} | "+" | ".join(links)+" |")
-        field_sections.append(f"### Da = {da}\n\n| Step | Time | C1 | C2 | Vorticity |\n"
-                              "|---|---|---|---|---|\n"+"\n".join(table))
-        print(f"Saved Da={da}: 24 individual DNS/MF/difference field figures (PNG/PDF).", flush=True)
+    for quantity in PROFILE_LABELS:
+        save_figure(profile_figure(profiles, quantity, times, limits[quantity]), output_dir/quantity)
+        files.append(dict(kind=quantity, base=quantity, snapshots=len(times),
+                          Damkohler=list(DAMKOHLERS), panels=len(times)))
+    print("Saved combined shear-stress and unmixedness figures: eight times each.", flush=True)
+    for field in FIELDS:
+        fig, field_metrics = field_figure(cases, field)
+        save_figure(fig, output_dir/field)
+        metrics.extend(field_metrics)
+        files.append(dict(kind=field, base=field, snapshots=len(times),
+                          Damkohler=list(DAMKOHLERS), panels=9*len(times)))
+        print(f"Saved combined {field}: all three Da, all eight times, DNS/MF/difference.", flush=True)
+    metrics.sort(key=lambda row: (row["Da"], row["snapshot"], FIELDS.index(row["field"])))
     write_csv(output_dir/"field_comparison_metrics.csv", metrics)
-    manifest = dict(sources=sources, times=times.tolist(), files=files,
+    manifest = dict(sources=sources, times=times.tolist(), files=files, image_format="png",
                     profile_limits=limits, line_styles=STYLES, difference="MF - DNS",
                     averaging="x mean at fixed y and time; no y/time averaging",
                     scalar_clipping=False, simulation_rerun=False,
@@ -201,17 +219,28 @@ def generate(input_root, output_dir):
                     postprocessor_sha256={name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in
                                           (Path(__file__).name, "plot_reaction_statistics.py", "plot_mean_field_results.py")})
     (output_dir/"manifest.json").write_text(json.dumps(manifest, indent=2, allow_nan=False)+"\n")
-    report = r"""# Per-snapshot shear stress, unmixedness, and field comparisons
+    report = r"""# Combined all-snapshot comparisons
 
 64×64, Re=Pe=100, RK4, Da=1,10,100. All **eight saved field snapshots** are
 included, from t=0 to t=0.65. There are not full-field data for every one of
 the 1,040 integration steps; no missing fields have been interpolated or rerun.
-The earlier time-history/overview plots are preserved.
+There are now **five combined PNG files**, one per quantity. The
+snapshot-per-file figures and their per-file profile CSVs
+have been removed. Original simulation snapshots and consolidated CSVs are
+unchanged; the earlier time-history/overview plots remain available.
+
+| Quantity | All-snapshot figure |
+|---|---|
+| Reynolds shear stress vs y | [PNG](./shear_stress.png) |
+| Unmixedness vs y | [PNG](./unmixedness.png) |
+| C1: DNS, MF, MF−DNS | [PNG](./c1.png) |
+| C2: DNS, MF, MF−DNS | [PNG](./c2.png) |
+| Vorticity: DNS, MF, MF−DNS | [PNG](./vorticity.png) |
 
 ## Shear stress and unmixedness versus y
 
-One separate file per quantity per snapshot; **all three Da in every plot,
-solid DNS / dashed MF**. Only the shear Reynolds stress is plotted here,
+Each profile figure contains eight time panels, with **all three Da in every
+panel, solid DNS / dashed MF**. Only the shear Reynolds stress is plotted here,
 not the normal components. The horizontal coordinate is y. Angle brackets
 mean the spatial average over periodic x at fixed y and time:
 
@@ -226,27 +255,27 @@ The three Da shear-stress curves coincide within each method because reaction
 does not feed back into momentum. Markers distinguish overlapping cases at
 interleaved existing grid locations; no curves or data are offset.
 
-Each quantity uses the same vertical-axis limits in all eight files, so the
+Each quantity uses the same vertical-axis limits in all eight panels, so the
 initial zero covariance and roundoff-level shear stress are not magnified.
-Every PNG has a matching PDF and a CSV containing all six 64-point profiles.
-
-| Step | Time | Shear stress vs y | Unmixedness vs y |
-|---|---|---|---|
-PROFILE_TABLE
+All six 64-point profiles at every time are in the consolidated profile CSV.
 
 ## C1, C2 and vorticity: DNS, MF, and signed differences
 
-Each linked file has three panels: **DNS | MF | MF − DNS**. These are 72
-individual comparisons: three fields × three Da × eight snapshots. The
-difference sign is identical everywhere. Coordinates retain the native MAC
+Each field has a single combined figure with **eight time columns** and
+**nine rows**: DNS, MF, and MF−DNS for Da=1, then Da=10, then Da=100. Thus
+each field figure has 72 panels and includes every case/time/method/difference.
+Difference panels report relative L2 against DNS. The difference sign is
+identical everywhere. Coordinates retain the native MAC
 layout, including vertex-centered vorticity and the periodic endpoint.
 No smoothing is applied. Physical color limits match DNS/MF and all Da.
 Concentration limits are fixed across all snapshots and include all recorded
 extrema. Vorticity limits adapt per snapshot to display decaying vortices
 without saturating the initial extrema. Each field's symmetric difference
-scale is fixed across all times and Da. Color limits are exported in the CSV.
-
-FIELD_TABLES
+scale is fixed across all times and Da. The vorticity figure has one physical
+colorbar under each time column, plus a shared difference colorbar. C1 and C2
+use a single physical colorbar and a separate difference colorbar. Color limits
+are exported in the CSV. The PNG figures are large so individual panels
+remain readable when zoomed.
 
 ## Verification and reusable data
 
@@ -261,8 +290,7 @@ Input hashes, plotting-source hashes, and the complete figure index are in
 
 Passing numerical checks is not a grid/timestep-convergence certificate.
 """
-    (output_dir/"README.md").write_text(report.replace("PROFILE_TABLE", "\n".join(profile_links))
-                                      .replace("FIELD_TABLES", "\n\n".join(field_sections)))
+    (output_dir/"README.md").write_text(report)
     return manifest
 
 
@@ -273,7 +301,7 @@ def main():
                         default=Path("outputs/reaction_64x64_re100_pe100_rk4_series/snapshot_comparisons"))
     args = parser.parse_args()
     result = generate(args.input_root, args.output_dir)
-    print(f"Complete: {len(result['files'])} figures, each in PNG and PDF; {args.output_dir/'README.md'}", flush=True)
+    print(f"Complete: {len(result['files'])} combined PNG figures; {args.output_dir/'README.md'}", flush=True)
 
 
 if __name__ == "__main__":
